@@ -1,5 +1,8 @@
 // In a real app, you would have a robust authentication system.
 // For this prototype, we'll use a mock user object.
+import { User as FirebaseUser } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { getSdks } from '@/firebase'; // Assuming getSdks gives firestore instance
 
 export type User = {
   id: string;
@@ -23,8 +26,39 @@ const mockUser: User = {
   streak: 5,
 };
 
-export async function getCurrentUser(): Promise<User> {
-  // Simulate an API call
+export async function getCurrentUser(firebaseUser?: FirebaseUser | null): Promise<User> {
+  if (firebaseUser) {
+    const { firestore } = getSdks(firebaseUser.app);
+    const userDocRef = doc(firestore, 'users', firebaseUser.uid);
+    const userDoc = await getDoc(userDocRef);
+
+    if (userDoc.exists()) {
+      const userData = userDoc.data();
+      return {
+        id: firebaseUser.uid,
+        name: userData.displayName || firebaseUser.displayName || 'Anonymous',
+        email: firebaseUser.email || '',
+        avatarUrl: firebaseUser.photoURL || `https://i.pravatar.cc/150?u=${firebaseUser.uid}`,
+        role: userData.role || 'student',
+        // These would come from the user's document in Firestore
+        xp: userData.xp || 0,
+        streak: userData.streak || 0,
+      };
+    } else {
+      // Default user profile if not in DB
+       return {
+        id: firebaseUser.uid,
+        name: firebaseUser.displayName || 'Anonymous',
+        email: firebaseUser.email || '',
+        avatarUrl: `https://i.pravatar.cc/150?u=${firebaseUser.uid}`,
+        role: 'student',
+        xp: 0,
+        streak: 0,
+      };
+    }
+  }
+
+  // Simulate an API call for logged-out user or for testing
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve(mockUser);

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
   BookOpen,
@@ -37,6 +37,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import Logo from '@/components/logo';
 import { type User, getCurrentUser } from '@/lib/auth';
+import { useAuth, useUser } from '@/firebase';
+import { signOut } from 'firebase/auth';
 
 type NavItem = {
   href: string;
@@ -59,13 +61,35 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user: firebaseUser, isUserLoading } = useUser();
+  const auth = useAuth();
   const [user, setUser] = React.useState<User | null>(null);
 
   React.useEffect(() => {
-    getCurrentUser().then(setUser);
-  }, []);
+    if (!isUserLoading) {
+      if (firebaseUser) {
+        getCurrentUser(firebaseUser).then(setUser);
+      } else {
+        router.push('/auth');
+      }
+    }
+  }, [firebaseUser, isUserLoading, router]);
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    router.push('/auth');
+  };
 
   const filteredNavItems = navItems.filter(item => user && item.roles.includes(user.role));
+
+  if (isUserLoading || !user) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <p>Loading user data...</p>
+      </div>
+    );
+  }
 
   return (
     <SidebarProvider>
@@ -108,7 +132,7 @@ export default function DashboardLayout({
             <SidebarTrigger className="md:hidden" />
             <h1 className="text-lg font-semibold">{navItems.find(item => item.href === pathname)?.label || 'Dashboard'}</h1>
           </div>
-          <UserNav user={user} />
+          <UserNav user={user} onLogout={handleLogout} />
         </header>
         <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
       </SidebarInset>
@@ -116,7 +140,7 @@ export default function DashboardLayout({
   );
 }
 
-function UserNav({ user }: { user: User | null }) {
+function UserNav({ user, onLogout }: { user: User | null, onLogout: () => void }) {
     if (!user) {
         return <div className="h-8 w-8 rounded-full bg-muted animate-pulse" />;
     }
@@ -146,11 +170,9 @@ function UserNav({ user }: { user: User | null }) {
           <span>Settings</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-            <Link href="/auth">
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>Log out</span>
-            </Link>
+        <DropdownMenuItem onClick={onLogout}>
+            <LogOut className="mr-2 h-4 w-4" />
+            <span>Log out</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
