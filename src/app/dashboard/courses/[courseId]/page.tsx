@@ -19,15 +19,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { Book, Edit } from 'lucide-react';
 
-export default async function CourseDetailPage({ params }: { params: { id: string } }) {
-  const course = await getCourseById(params.id);
+export default async function CourseDetailPage({ params }: { params: { courseId: string } }) {
+  const course = await getCourseById(params.courseId);
   if (!course) {
     notFound();
   }
 
-  const topics = await getTopicsByCourseId(params.id);
+  const topics = await getTopicsByCourseId(params.courseId);
   // In a real app, you'd get the current user's ID
-  const progress = await getStudentProgress('1', params.id);
+  const progress = await getStudentProgress('1', params.courseId);
   const totalTopics = topics.length;
   const completedTopicsCount = progress?.completedTopics.length || 0;
   const courseCompletion = totalTopics > 0 ? (completedTopicsCount / totalTopics) * 100 : 0;
@@ -82,13 +82,13 @@ export default async function CourseDetailPage({ params }: { params: { id: strin
                        <p className="text-muted-foreground mb-4 pt-4">Ready to master this topic? Choose your study method.</p>
                        <div className="flex gap-4">
                             <Button asChild>
-                                <Link href={`/dashboard/courses/${params.id}/flashcards?topic=${topic.id}`}>
+                                <Link href={`/dashboard/courses/${params.courseId}/flashcards?topic=${topic.id}`}>
                                     <Book className="mr-2 h-4 w-4" />
                                     Study Flashcards
                                 </Link>
                             </Button>
                              <Button asChild variant="outline">
-                                <Link href={`/dashboard/courses/${params.id}/quiz?topic=${topic.id}`}>
+                                <Link href={`/dashboard/courses/${params.courseId}/quiz?topic=${topic.id}`}>
                                     <Edit className="mr-2 h-4 w-4" />
                                     Start Quiz
                                 </Link>
