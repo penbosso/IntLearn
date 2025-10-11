@@ -1,3 +1,40 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "course-biology",
+      "description": "Abstract representation of biological cells and DNA.",
+      "imageUrl": "https://picsum.photos/seed/biology/600/400",
+      "imageHint": "biology science"
+    },
+    {
+      "id": "course-history",
+      "description": "An old, vintage map representing a history course.",
+      "imageUrl": "https://picsum.photos/seed/history/600/400",
+      "imageHint": "history map"
+    },
+    {
+      "id": "course-calculus",
+      "description": "Complex mathematical formulas written on a chalkboard.",
+      "imageUrl": "https://picsum.photos/seed/calculus/600/400",
+      "imageHint": "math equations"
+    },
+    {
+      "id": "course-literature",
+      "description": "A stack of classic books in a library setting.",
+      "imageUrl": "https://picsum.photos/seed/literature/600/400",
+      "imageHint": "books library"
+    },
+    {
+      "id": "course-physics",
+      "description": "Illustration of atomic structures and particle physics.",
+      "imageUrl": "https://picsum.photos/seed/physics/600/400",
+      "imageHint": "physics atom"
+    },
+    {
+      "id": "course-chemistry",
+      "description": "Glass beakers and flasks with colorful chemicals.",
+      "imageUrl": "https://picsum.photos/seed/chemistry/600/400",
+      "imageHint": "chemistry lab"
+    }
+  ]
 }
