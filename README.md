@@ -1,5 +1,3 @@
-# Firebase Studio
+# IntelliLearn
 
-This is a NextJS starter in Firebase Studio.
-
-To get started, take a look at src/app/page.tsx.
+An interactive Interlligent learning platform where Admins (educators) upload course materials (photos, PDFs, or text) and AI automatically extracts knowledge into: Flashcards

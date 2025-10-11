@@ -52,9 +52,9 @@ export default function Home() {
   ];
 
   return (
-    <div className="flex min-h-screen flex-col items-center">
+    <div className="flex flex-col min-h-screen w-full items-center">
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center">
+        <div className="flex h-16 items-center p-4">
           <Logo />
           <div className="flex flex-1 items-center justify-end space-x-4">
             <nav className="flex items-center space-x-2">
@@ -71,7 +71,7 @@ export default function Home() {
 
       <main className="flex-1 w-full">
         <section className="py-20 md:py-32">
-          <div className="container text-center">
+          <div className="text-center">
             <div className="mx-auto max-w-3xl">
               <h1 className="text-4xl font-bold tracking-tighter sm:text-5xl md:text-6xl lg:text-7xl font-headline">
                 The Smarter Way to Learn
@@ -94,7 +94,7 @@ export default function Home() {
         </section>
 
         <section id="features" className="py-20 md:py-32 bg-secondary">
-          <div className="container">
+          <div className="">
             <div className="mx-auto mb-12 max-w-2xl text-center">
               <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl font-headline">
                 A Powerful, Personalized Learning Toolkit
@@ -128,7 +128,7 @@ export default function Home() {
         </section>
 
         <section className="py-20 md:py-32">
-          <div className="container text-center">
+          <div className="text-center">
             <div className="mx-auto max-w-2xl">
               <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl font-headline">
                 Ready to Revolutionize Your Studying?
@@ -148,7 +148,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t bg-secondary w-full">
-        <div className="container flex h-16 items-center justify-between">
+        <div className="container flex h-16 p-4 items-center justify-between">
           <Logo />
           <p className="text-sm text-muted-foreground">
             &copy; {new Date().getFullYear()} IntelliLearn. All rights
