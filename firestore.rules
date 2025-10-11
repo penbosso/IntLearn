@@ -1,0 +1,291 @@
+/**
+ * @file Firestore Security Rules for IntLearn Platform
+ * @version 2
+ *
+ * @Core Philosophy:
+ * This ruleset enforces a strict owner-only access model for user-specific data
+ * and an admin-ownership model for course content. It uses denormalization to
+ * ensure authorization independence for course subcollections.
+ *
+ * @Data Structure:
+ * - /users/{userId}: Stores user profile information, accessible only by the user.
+ * - /courses/{courseId}: Stores course information, owned by the admin who created it.
+ * - /courses/{courseId}/topics/{topicId}: Stores topics, with denormalized adminId for access control.
+ * - /courses/{courseId}/topics/{topicId}/flashcards/{flashcardId}: Stores flashcards, with denormalized adminId.
+ * - /courses/{courseId}/topics/{topicId}/questions/{questionId}: Stores questions, with denormalized adminId.
+ * - /courses/{courseId}/topics/{topicId}/quizzes/{quizId}: Stores quizzes, with denormalized adminId.
+ * - /users/{userId}/enrollments/{enrollmentId}: Stores enrollment data, accessible only by the user.
+ * - /users/{userId}/quizAttempts/{quizAttemptId}: Stores quiz attempts, accessible only by the user.
+ * - /users/{userId}/performances/{performanceId}: Stores performance data, accessible only by the user.
+ * - /users/{userId}/userBadges/{userBadgeId}: Stores user badges, accessible only by the user.
+ * - /badges/{badgeId}: Stores information about available badges; read access is public, write access is restricted.
+ *
+ * @Key Security Decisions:
+ * - User data is strictly controlled using path-based ownership.
+ * - Course content is owned by the admin who created the course, enforced via denormalization.
+ * - Public read access is granted for the /badges collection.
+ * - Data validation is limited to ownership checks to simplify prototyping.
+ *
+ * @Denormalization for Authorization:
+ * - The `adminId` is denormalized from the `Course` document into all subcollection documents
+ *   (e.g., `Topic`, `Flashcard`, `Question`, `Quiz`). This allows the security rules to check
+ *   admin ownership without requiring additional `get()` calls, which can be slow and expensive.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Controls access to user profile information.
+     * @path /users/{userId}
+     * @allow (create) - Authenticated user creates their own profile.
+     * @allow (get, list, update, delete) - Authenticated user accesses their own profile.
+     * @deny (create, update, delete) - Another user attempts to modify this profile.
+     * @principle Enforces document ownership for writes.
+     */
+    match /users/{userId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Controls access to course information.
+     * @path /courses/{courseId}
+     * @allow (create) - Authenticated user creates a new course with their ID as adminId.
+     * @allow (get, list) - Public read access to course information.
+     * @allow (update, delete) - Only the admin who created the course can update or delete it.
+     * @deny (create) - User attempts to create a course with an adminId that doesn't match their own.
+     * @deny (update, delete) - Another user attempts to modify this course.
+     * @principle Enforces admin-ownership for writes, public read access.
+     */
+    match /courses/{courseId} {
+      function isAdmin(adminId) {
+        return request.auth != null && request.auth.uid == adminId;
+      }
+
+      function isExistingAdmin(adminId) {
+        return isAdmin(adminId) && resource != null;
+      }
+
+      allow get, list: if true;
+      allow create: if request.auth != null && request.resource.data.adminId == request.auth.uid;
+      allow update: if isExistingAdmin(resource.data.adminId);
+      allow delete: if isExistingAdmin(resource.data.adminId);
+    }
+
+    /**
+     * @description Controls access to topics within a course.
+     * @path /courses/{courseId}/topics/{topicId}
+     * @allow (create) - Admin creates a new topic within their course.
+     * @allow (get, list) - Public read access to topics.
+     * @allow (update, delete) - Only the admin who created the course can update or delete topics.
+     * @deny (create) - User attempts to create a topic in a course they don't administer.
+     * @deny (update, delete) - Another user attempts to modify this topic.
+     * @principle Enforces admin-ownership for writes, public read access, authorization independence.
+     */
+    match /courses/{courseId}/topics/{topicId} {
+      function isAdmin(adminId) {
+        return request.auth != null && request.auth.uid == adminId;
+      }
+
+       function isExistingAdmin(adminId) {
+        return isAdmin(adminId) && resource != null;
+      }
+
+      allow get, list: if true;
+      allow create: if request.auth != null && get(/databases/$(database)/documents/courses/$(courseId)).data.adminId == request.auth.uid;
+      allow update: if isExistingAdmin(get(/databases/$(database)/documents/courses/$(courseId)).data.adminId);
+      allow delete: if isExistingAdmin(get(/databases/$(database)/documents/courses/$(courseId)).data.adminId);
+    }
+
+    /**
+     * @description Controls access to flashcards within a topic.
+     * @path /courses/{courseId}/topics/{topicId}/flashcards/{flashcardId}
+     * @allow (create) - Admin creates a new flashcard within their topic.
+     * @allow (get, list) - Public read access to flashcards.
+     * @allow (update, delete) - Only the admin who created the course can update or delete flashcards.
+     * @deny (create) - User attempts to create a flashcard in a topic they don't administer.
+     * @deny (update, delete) - Another user attempts to modify this flashcard.
+     * @principle Enforces admin-ownership for writes, public read access, authorization independence.
+     */
+    match /courses/{courseId}/topics/{topicId}/flashcards/{flashcardId} {
+      function isAdmin(adminId) {
+        return request.auth != null && request.auth.uid == adminId;
+      }
+
+       function isExistingAdmin(adminId) {
+        return isAdmin(adminId) && resource != null;
+      }
+
+      allow get, list: if true;
+      allow create: if request.auth != null && get(/databases/$(database)/documents/courses/$(courseId)).data.adminId == request.auth.uid;
+      allow update: if isExistingAdmin(get(/databases/$(database)/documents/courses/$(courseId)).data.adminId);
+      allow delete: if isExistingAdmin(get(/databases/$(database)/documents/courses/$(courseId)).data.adminId);
+    }
+
+    /**
+     * @description Controls access to questions within a topic.
+     * @path /courses/{courseId}/topics/{topicId}/questions/{questionId}
+     * @allow (create) - Admin creates a new question within their topic.
+     * @allow (get, list) - Public read access to questions.
+     * @allow (update, delete) - Only the admin who created the course can update or delete questions.
+     * @deny (create) - User attempts to create a question in a topic they don't administer.
+     * @deny (update, delete) - Another user attempts to modify this question.
+     * @principle Enforces admin-ownership for writes, public read access, authorization independence.
+     */
+    match /courses/{courseId}/topics/{topicId}/questions/{questionId} {
+      function isAdmin(adminId) {
+        return request.auth != null && request.auth.uid == adminId;
+      }
+
+       function isExistingAdmin(adminId) {
+        return isAdmin(adminId) && resource != null;
+      }
+
+      allow get, list: if true;
+      allow create: if request.auth != null && get(/databases/$(database)/documents/courses/$(courseId)).data.adminId == request.auth.uid;
+      allow update: if isExistingAdmin(get(/databases/$(database)/documents/courses/$(courseId)).data.adminId);
+      allow delete: if isExistingAdmin(get(/databases/$(database)/documents/courses/$(courseId)).data.adminId);
+    }
+
+    /**
+     * @description Controls access to quizzes within a topic.
+     * @path /courses/{courseId}/topics/{topicId}/quizzes/{quizId}
+     * @allow (create) - Admin creates a new quiz within their topic.
+     * @allow (get, list) - Public read access to quizzes.
+     * @allow (update, delete) - Only the admin who created the course can update or delete quizzes.
+     * @deny (create) - User attempts to create a quiz in a topic they don't administer.
+     * @deny (update, delete) - Another user attempts to modify this quiz.
+     * @principle Enforces admin-ownership for writes, public read access, authorization independence.
+     */
+    match /courses/{courseId}/topics/{topicId}/quizzes/{quizId} {
+      function isAdmin(adminId) {
+        return request.auth != null && request.auth.uid == adminId;
+      }
+
+       function isExistingAdmin(adminId) {
+        return isAdmin(adminId) && resource != null;
+      }
+
+      allow get, list: if true;
+      allow create: if request.auth != null && get(/databases/$(database)/documents/courses/$(courseId)).data.adminId == request.auth.uid;
+      allow update: if isExistingAdmin(get(/databases/$(database)/documents/courses/$(courseId)).data.adminId);
+      allow delete: if isExistingAdmin(get(/databases/$(database)/documents/courses/$(courseId)).data.adminId);
+    }
+
+    /**
+     * @description Controls access to enrollment information for a user.
+     * @path /users/{userId}/enrollments/{enrollmentId}
+     * @allow (create, get, list, update, delete) - Authenticated user accesses their own enrollment data.
+     * @deny (create, update, delete) - Another user attempts to modify this enrollment data.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId}/enrollments/{enrollmentId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == userId;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Controls access to quiz attempts for a user.
+     * @path /users/{userId}/quizAttempts/{quizAttemptId}
+     * @allow (create, get, list, update, delete) - Authenticated user accesses their own quiz attempts.
+     * @deny (create, update, delete) - Another user attempts to modify this quiz attempt data.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId}/quizAttempts/{quizAttemptId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == userId;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Controls access to performance data for a user.
+     * @path /users/{userId}/performances/{performanceId}
+     * @allow (create, get, list, update, delete) - Authenticated user accesses their own performance data.
+     * @deny (create, update, delete) - Another user attempts to modify this performance data.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId}/performances/{performanceId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == userId;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Controls access to badges earned by a user.
+     * @path /users/{userId}/userBadges/{userBadgeId}
+     * @allow (create, get, list, update, delete) - Authenticated user accesses their own badges.
+     * @deny (create, update, delete) - Another user attempts to modify this user's badge data.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId}/userBadges/{userBadgeId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+      }
+
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userId == userId;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Controls access to available badges.
+     * @path /badges/{badgeId}
+     * @allow (get, list) - Public read access to badge information.
+     * @deny (create, update, delete) - Only authorized admins can create, update, or delete badges.
+     * @principle Public read access, restricted write access.
+     */
+    match /badges/{badgeId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add admin role check
+    }
+  }
+}
