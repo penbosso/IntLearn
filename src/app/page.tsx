@@ -54,7 +54,7 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen w-full">
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center p-4">
+        <div className="container flex h-16 items-center ">
           <Logo />
           <div className="flex flex-1 items-center justify-end space-x-4">
             <nav className="flex items-center space-x-2">
@@ -152,7 +152,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t bg-secondary w-full">
-        <div className="container flex h-16 p-4 items-center justify-between">
+        <div className="container flex h-16 items-center justify-between">
           <Logo />
           <p className="text-sm text-muted-foreground">
             &copy; {new Date().getFullYear()} IntelliLearn. All rights

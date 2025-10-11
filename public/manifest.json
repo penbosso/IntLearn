@@ -1,0 +1,21 @@
+{
+  "name": "IntelliLearn",
+  "short_name": "IntelliLearn",
+  "description": "An interactive Intelligent learning platform where Admins (educators) upload course materials (photos, PDFs, or text) and AI automatically extracts knowledge into: Flashcards",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#E9F5FD",
+  "theme_color": "#A4D9F7",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

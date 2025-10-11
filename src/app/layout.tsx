@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   title: 'IntelliLearn - AI-Powered Interactive Learning',
   description:
     'Transform your study materials into interactive flashcards and quizzes with the power of AI.',
+  manifest: '/manifest.json',
 };
 
 export default function RootLayout({
