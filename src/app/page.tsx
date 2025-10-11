@@ -52,9 +52,9 @@ export default function Home() {
   ];
 
   return (
-    <div className="flex flex-col min-h-screen w-full items-center">
+    <div className="flex flex-col min-h-screen w-full">
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex h-16 items-center p-4">
+        <div className="container flex h-16 items-center p-4">
           <Logo />
           <div className="flex flex-1 items-center justify-end space-x-4">
             <nav className="flex items-center space-x-2">
@@ -70,31 +70,33 @@ export default function Home() {
       </header>
 
       <main className="flex-1 w-full">
-        <section className="py-20 md:py-32">
-          <div className="text-center">
-            <div className="mx-auto max-w-3xl">
-              <h1 className="text-4xl font-bold tracking-tighter sm:text-5xl md:text-6xl lg:text-7xl font-headline">
-                The Smarter Way to Learn
-              </h1>
-              <p className="mt-6 text-lg text-muted-foreground md:text-xl">
-                IntelliLearn uses AI to transform your study materials into
-                interactive flashcards, adaptive quizzes, and actionable
-                insights. Study smarter, not harder.
-              </p>
-            </div>
-            <div className="mt-8 flex justify-center gap-4">
-              <Button asChild size="lg">
-                <Link href="/auth">Start Learning Now</Link>
-              </Button>
-              <Button asChild size="lg" variant="outline">
-                <Link href="#features">Explore Features</Link>
-              </Button>
+        <section className="w-full py-20 md:py-32">
+          <div className="container px-4 md:px-6">
+            <div className="text-center">
+              <div className="mx-auto max-w-3xl">
+                <h1 className="text-4xl font-bold tracking-tighter sm:text-5xl md:text-6xl lg:text-7xl font-headline">
+                  The Smarter Way to Learn
+                </h1>
+                <p className="mt-6 text-lg text-muted-foreground md:text-xl">
+                  IntelliLearn uses AI to transform your study materials into
+                  interactive flashcards, adaptive quizzes, and actionable
+                  insights. Study smarter, not harder.
+                </p>
+              </div>
+              <div className="mt-8 flex justify-center gap-4">
+                <Button asChild size="lg">
+                  <Link href="/auth">Start Learning Now</Link>
+                </Button>
+                <Button asChild size="lg" variant="outline">
+                  <Link href="#features">Explore Features</Link>
+                </Button>
+              </div>
             </div>
           </div>
         </section>
 
-        <section id="features" className="py-20 md:py-32 bg-secondary">
-          <div className="">
+        <section id="features" className="w-full py-20 md:py-32 bg-secondary">
+          <div className="container px-4 md:px-6">
             <div className="mx-auto mb-12 max-w-2xl text-center">
               <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl font-headline">
                 A Powerful, Personalized Learning Toolkit
@@ -127,20 +129,22 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="py-20 md:py-32">
-          <div className="text-center">
-            <div className="mx-auto max-w-2xl">
-              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl font-headline">
-                Ready to Revolutionize Your Studying?
-              </h2>
-              <p className="mt-4 text-lg text-muted-foreground">
-                Join thousands of students and educators embracing the future
-                of learning.
-              </p>
-              <div className="mt-8">
-                <Button asChild size="lg">
-                  <Link href="/auth">Get Started for Free</Link>
-                </Button>
+        <section className="w-full py-20 md:py-32">
+          <div className="container px-4 md:px-6">
+            <div className="text-center">
+              <div className="mx-auto max-w-2xl">
+                <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl font-headline">
+                  Ready to Revolutionize Your Studying?
+                </h2>
+                <p className="mt-4 text-lg text-muted-foreground">
+                  Join thousands of students and educators embracing the future
+                  of learning.
+                </p>
+                <div className="mt-8">
+                  <Button asChild size="lg">
+                    <Link href="/auth">Get Started for Free</Link>
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
