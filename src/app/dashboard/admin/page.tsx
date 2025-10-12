@@ -46,13 +46,6 @@ export default function AdminDashboardPage() {
   
   const { data: courses, isLoading: areCoursesLoading } = useCollection<Course>(coursesQuery);
 
-  const studentsQuery = useMemoFirebase(
-    () => firestore ? query(collection(firestore, 'users'), where('role', '==', 'student')) : null,
-    [firestore]
-  );
-  const { data: students, isLoading: areStudentsLoading } = useCollection<User>(studentsQuery);
-
-
   const allAttemptsQuery = useMemoFirebase(
     () => firestore ? query(collectionGroup(firestore, 'quizAttempts')) : null,
     [firestore]
@@ -71,7 +64,7 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const isLoading = areCoursesLoading || areAttemptsLoading || areStudentsLoading || !user;
+  const isLoading = areCoursesLoading || areAttemptsLoading || !user;
 
   if (isLoading) {
     return (
@@ -100,20 +93,6 @@ export default function AdminDashboardPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Students</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {areStudentsLoading ? <Loader2 className="h-6 w-6 animate-spin"/> :
-                <>
-                    <div className="text-2xl font-bold">{students?.length || 0}</div>
-                    <p className="text-xs text-muted-foreground">students have signed up</p>
-                </>
-            }
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Your Courses</CardTitle>
             <BookOpen className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -140,6 +119,22 @@ export default function AdminDashboardPage() {
             }
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Manage Students</CardTitle>
+            <CardDescription>
+                View student progress and analytics.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+              <Button asChild>
+                  <Link href="/dashboard/admin/students">
+                      <Users className="mr-2 h-4 w-4" />
+                      View All Students
+                  </Link>
+              </Button>
+          </CardContent>
+        </Card>
       </div>
 
        <Card>
@@ -151,23 +146,6 @@ export default function AdminDashboardPage() {
               <AdminAnalyticsChart />
           </CardContent>
        </Card>
-
-       <Card>
-        <CardHeader>
-          <CardTitle>Manage Students</CardTitle>
-          <CardDescription>
-            View student progress and analytics.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-            <Button asChild>
-                <Link href="/dashboard/admin/students">
-                    <Users className="mr-2 h-4 w-4" />
-                    View All Students
-                </Link>
-            </Button>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
