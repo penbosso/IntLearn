@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronsUpDown } from "lucide-react"
+import { Check, ChevronsUpDown, PlusCircle } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -102,7 +102,7 @@ export function CreatableCombobox({
   options: ComboboxOption[]
   value: string
   onChange: (value: string) => void
-  onCreate: (value: string) => Promise<string>
+  onCreate: (value: string) => Promise<void>
   placeholder?: string
   emptyMessage?: string
   className?: string
@@ -112,21 +112,20 @@ export function CreatableCombobox({
   const selectedOption = options.find((option) => option.value === value)
 
   const handleCreate = async (newLabel: string) => {
-    const trimmedLabel = newLabel.trim();
-    if (!trimmedLabel) return;
-    
-    const existingOption = options.find(
-      (opt) => opt.label.toLowerCase() === trimmedLabel.toLowerCase()
-    )
-    if (existingOption) {
-      onChange(existingOption.value)
-    } else {
-      const newId = await onCreate(trimmedLabel);
-      onChange(newId);
-    }
-    setInputValue("")
+    const trimmedLabel = newLabel.trim()
+    if (!trimmedLabel) return
+
     setOpen(false)
+    setInputValue("")
+    await onCreate(trimmedLabel)
   }
+
+  const filteredOptions = options.filter((option) =>
+    option.label.toLowerCase().includes(inputValue.toLowerCase())
+  );
+  
+  const showCreateOption = inputValue && !options.some(option => option.label.toLowerCase() === inputValue.toLowerCase());
+
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -152,27 +151,23 @@ export function CreatableCombobox({
             placeholder={placeholder}
             value={inputValue}
             onValueChange={setInputValue}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && inputValue) {
-                e.preventDefault();
-                handleCreate(inputValue);
-              }
-            }}
           />
           <CommandList>
-            <CommandEmpty>
-                <div 
-                    className="p-2 cursor-pointer"
-                    onMouseDown={(e) => {
-                        e.preventDefault();
-                        handleCreate(inputValue);
-                    }}
-                >
-                    Create "{inputValue}"
-                </div>
-            </CommandEmpty>
+             {filteredOptions.length === 0 && !showCreateOption && (
+               <CommandEmpty>{emptyMessage}</CommandEmpty>
+             )}
             <CommandGroup>
-              {options.map((option) => (
+              {showCreateOption && (
+                <CommandItem
+                  value={inputValue}
+                  onSelect={() => handleCreate(inputValue)}
+                  className="flex items-center gap-2"
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  Create "{inputValue}"
+                </CommandItem>
+              )}
+              {filteredOptions.map((option) => (
                 <CommandItem
                   key={option.value}
                   value={option.label}

@@ -314,20 +314,21 @@ function EditContentDialog({ item, topics, originalTopicId, courseId, type, chil
         setSelectedTopicId(originalTopicId);
     }, [item, originalTopicId]);
 
-    const handleCreateTopic = async (topicName: string): Promise<string> => {
-        if (!firebaseUser) throw new Error("User not authenticated.");
+    const handleCreateTopic = async (topicName: string) => {
+      if (!firebaseUser) throw new Error("User not authenticated.");
 
-        const newTopicRef = await addDoc(collection(firestore, `courses/${courseId}/topics`), {
-            name: topicName,
-            description: `New topic: ${topicName}`,
-            courseId: courseId,
-            adminId: firebaseUser.uid,
-            createdAt: serverTimestamp(),
-        });
-        toast({ title: "Topic Created", description: `Successfully created "${topicName}".` });
-        onTopicChange();
-        return newTopicRef.id;
-    };
+      const newTopicRef = await addDoc(collection(firestore, `courses/${courseId}/topics`), {
+          name: topicName,
+          description: `New topic: ${topicName}`,
+          courseId: courseId,
+          adminId: firebaseUser.uid,
+          createdAt: serverTimestamp(),
+      });
+      toast({ title: "Topic Created", description: `Successfully created "${topicName}".` });
+      
+      onTopicChange();
+      setSelectedTopicId(newTopicRef.id);
+  };
 
     const handleSave = async () => {
         setLoading(true);
@@ -395,14 +396,7 @@ function EditContentDialog({ item, topics, originalTopicId, courseId, type, chil
                             options={topicOptions}
                             value={selectedTopicId}
                             onChange={setSelectedTopicId}
-                            onCreate={async (newTopicName) => {
-                                try {
-                                    const newTopicId = await handleCreateTopic(newTopicName);
-                                    setSelectedTopicId(newTopicId);
-                                } catch (error: any) {
-                                     toast({ variant: "destructive", title: "Error Creating Topic", description: error.message });
-                                }
-                            }}
+                            onCreate={handleCreateTopic}
                             placeholder="Select or create a topic..."
                         />
                     </div>
@@ -761,7 +755,7 @@ export default function AdminCourseReviewPage() {
                   <TableRow>
                     <TableHead className="w-[50px]">
                         <Checkbox
-                            checked={selectedFlashcards.length > 0 && selectedFlashcards.length === flashcards?.length}
+                            checked={selectedFlashcards.length > 0 && flashcards?.length ? selectedFlashcards.length === flashcards.length : false}
                             onCheckedChange={(checked) => {
                                 if (checked && flashcards) {
                                     setSelectedFlashcards(flashcards.map(fc => fc.id));
@@ -782,7 +776,7 @@ export default function AdminCourseReviewPage() {
                      <TableRow><TableCell colSpan={5} className="text-center">Loading flashcards...</TableCell></TableRow>
                   ) : flashcards && flashcards.length > 0 ? (
                     flashcards.map((fc) => (
-                      <TableRow key={fc.id} data-state={selectedFlashcards.includes(fc.id) && "selected"}>
+                      <TableRow key={fc.id} data-state={selectedFlashcards.includes(fc.id) ? "selected" : undefined}>
                         <TableCell>
                             <Checkbox
                                 checked={selectedFlashcards.includes(fc.id)}
@@ -874,7 +868,7 @@ export default function AdminCourseReviewPage() {
                   <TableRow>
                     <TableHead className="w-[50px]">
                          <Checkbox
-                            checked={selectedQuestions.length > 0 && selectedQuestions.length === questions?.length}
+                            checked={selectedQuestions.length > 0 && questions?.length ? selectedQuestions.length === questions.length : false}
                             onCheckedChange={(checked) => {
                                 if (checked && questions) {
                                     setSelectedQuestions(questions.map(q => q.id));
@@ -895,7 +889,7 @@ export default function AdminCourseReviewPage() {
                      <TableRow><TableCell colSpan={5} className="text-center">Loading questions...</TableCell></TableRow>
                   ) : questions && questions.length > 0 ? (
                     questions.map((q) => (
-                      <TableRow key={q.id} data-state={selectedQuestions.includes(q.id) && "selected"}>
+                      <TableRow key={q.id} data-state={selectedQuestions.includes(q.id) ? "selected" : undefined}>
                         <TableCell>
                             <Checkbox
                                 checked={selectedQuestions.includes(q.id)}
@@ -970,7 +964,17 @@ export default function AdminCourseReviewPage() {
                     options={topicOptions}
                     value={bulkActionTopic}
                     onChange={setBulkActionTopic}
-                    onCreate={async (newTopicName) => setBulkActionTopic(newTopicName)}
+                    onCreate={async (newTopicName) => {
+                      const newTopicRef = await addDoc(collection(firestore, `courses/${courseId}/topics`), {
+                          name: newTopicName,
+                          description: `New topic: ${newTopicName}`,
+                          courseId,
+                          adminId: course?.adminId,
+                          createdAt: serverTimestamp(),
+                      });
+                      handleContentRefresh();
+                      setBulkActionTopic(newTopicRef.id);
+                  }}
                     placeholder="Select or create a new topic..."
                 />
             </div>
