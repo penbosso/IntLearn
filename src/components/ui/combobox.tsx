@@ -111,7 +111,7 @@ export function CreatableCombobox({
   const [inputValue, setInputValue] = React.useState("")
   const selectedOption = options.find((option) => option.value === value)
 
-  const handleCreate = (newLabel: string) => {
+  const handleCreate = async (newLabel: string) => {
     const trimmedLabel = newLabel.trim();
     if (!trimmedLabel) return;
     
@@ -121,9 +121,8 @@ export function CreatableCombobox({
     if (existingOption) {
       onChange(existingOption.value)
     } else {
-      onCreate(trimmedLabel).then(newId => {
-          onChange(newId);
-      });
+      const newId = await onCreate(trimmedLabel);
+      onChange(newId);
     }
     setInputValue("")
     setOpen(false)

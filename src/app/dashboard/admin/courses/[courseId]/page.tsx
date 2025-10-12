@@ -970,7 +970,7 @@ export default function AdminCourseReviewPage() {
                     options={topicOptions}
                     value={bulkActionTopic}
                     onChange={setBulkActionTopic}
-                    onCreate={(newTopicName) => setBulkActionTopic(newTopicName)}
+                    onCreate={async (newTopicName) => setBulkActionTopic(newTopicName)}
                     placeholder="Select or create a new topic..."
                 />
             </div>
