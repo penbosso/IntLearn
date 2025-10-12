@@ -34,7 +34,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2 } from 'lucide-react';
-import { useCollection, useDoc, useMemoFirebase, useAuth, useFirestore } from '@/firebase';
+import { useCollection, useDoc, useMemoFirebase, useAuth, useFirestore, useUser } from '@/firebase';
 import { doc, collection, query, writeBatch, serverTimestamp } from 'firebase/firestore';
 import {
     Select,
@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from '@/hooks/use-toast';
 import { generateFlashcardsAndQuestions } from '@/ai/flows/generate-flashcards-and-questions';
+import { getCurrentUser } from '@/lib/auth';
 
 
 // Helper to read file as text or data URL
@@ -65,7 +66,7 @@ const readFileAs = (file: File, as: 'text' | 'dataURL'): Promise<string> => {
 function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onContentAdded: () => void }) {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const auth = useAuth();
+  const { user: firebaseUser } = useUser();
   const [loading, setLoading] = useState(false);
   const [topicName, setTopicName] = useState('');
   const [textContent, setTextContent] = useState('');
@@ -98,10 +99,15 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
     });
 
     try {
-      const user = auth.currentUser;
-      if (!user) {
+      if (!firebaseUser) {
         throw new Error('You must be logged in to add content.');
       }
+      
+      const appUser = await getCurrentUser(firebaseUser);
+      if (appUser.role !== 'admin') {
+        throw new Error('You must be an administrator to add content.');
+      }
+
 
       let courseMaterial = textContent;
       let materialType: 'text' | 'image' | 'pdf' = 'text';
@@ -131,7 +137,7 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
         name: topicName,
         description: `Content for ${topicName}`,
         courseId: courseId,
-        adminId: user.uid,
+        adminId: firebaseUser.uid,
         createdAt: serverTimestamp(),
       });
 
@@ -141,7 +147,7 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
           ...flashcard,
           topicId: topicRef.id,
           status: 'needs-review',
-          adminId: user.uid,
+          adminId: firebaseUser.uid,
         });
       });
 
@@ -154,7 +160,7 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
           options: question.options ?? [],
           topicId: topicRef.id,
           status: 'needs-review',
-          adminId: user.uid,
+          adminId: firebaseUser.uid,
         });
       });
 

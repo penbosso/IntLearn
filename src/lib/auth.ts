@@ -1,8 +1,9 @@
+
 // In a real app, you would have a robust authentication system.
 // For this prototype, we'll use a mock user object.
 import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { getSdks } from '@/firebase'; // Assuming getSdks gives firestore instance
+import { initializeFirebase } from '@/firebase'; 
 
 export type User = {
   id: string;
@@ -28,7 +29,7 @@ const mockUser: User = {
 
 export async function getCurrentUser(firebaseUser?: FirebaseUser | null): Promise<User> {
   if (firebaseUser) {
-    const { firestore } = getSdks(firebaseUser.app);
+    const { firestore } = initializeFirebase();
     const userDocRef = doc(firestore, 'users', firebaseUser.uid);
     const userDoc = await getDoc(userDocRef);
 
