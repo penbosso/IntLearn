@@ -117,9 +117,11 @@ export default function DashboardLayout({
           <SidebarFooter>
              <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton tooltip="Settings">
-                    <Settings />
-                    <span>Settings</span>
+                  <SidebarMenuButton asChild tooltip="Settings" isActive={pathname === '/dashboard/settings'}>
+                    <Link href="/dashboard/settings">
+                      <Settings />
+                      <span>Settings</span>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
              </SidebarMenu>
@@ -165,9 +167,11 @@ function UserNav({ user, onLogout }: { user: User | null, onLogout: () => void }
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
-          <Settings className="mr-2 h-4 w-4" />
-          <span>Settings</span>
+        <DropdownMenuItem asChild>
+            <Link href="/dashboard/settings">
+              <Settings className="mr-2 h-4 w-4" />
+              <span>Settings</span>
+            </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onLogout}>
