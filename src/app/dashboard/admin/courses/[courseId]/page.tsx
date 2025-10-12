@@ -20,6 +20,17 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,9 +44,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2 } from 'lucide-react';
+import { Check, CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2 } from 'lucide-react';
 import { useCollection, useDoc, useMemoFirebase, useAuth, useFirestore, useUser } from '@/firebase';
-import { doc, collection, query, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { doc, collection, query, writeBatch, serverTimestamp, deleteDoc, updateDoc } from 'firebase/firestore';
 import {
     Select,
     SelectContent,
@@ -279,11 +290,103 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
   );
 }
 
+function EditContentDialog({ item, topicId, courseId, type, children }: { item: any, topicId: string, courseId: string, type: 'flashcard' | 'question', children: React.ReactNode }) {
+    const { toast } = useToast();
+    const firestore = useFirestore();
+    const [loading, setLoading] = useState(false);
+    const [content, setContent] = useState(item);
+    const [open, setOpen] = useState(false);
+
+    useEffect(() => {
+        setContent(item);
+    }, [item]);
+
+    const handleSave = async () => {
+        setLoading(true);
+        const collectionPath = type === 'flashcard' ? `courses/${courseId}/topics/${topicId}/flashcards` : `courses/${courseId}/topics/${topicId}/questions`;
+        const itemRef = doc(firestore, collectionPath, item.id);
+
+        try {
+            await updateDoc(itemRef, content);
+            toast({
+                title: 'Content Updated',
+                description: `The ${type} has been successfully saved.`,
+            });
+            setOpen(false);
+        } catch (error: any) {
+            toast({
+                variant: 'destructive',
+                title: 'Error Saving',
+                description: `Could not save the ${type}.`,
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>{children}</DialogTrigger>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Edit {type === 'flashcard' ? 'Flashcard' : 'Question'}</DialogTitle>
+                </DialogHeader>
+                <div className="py-4 space-y-4">
+                    {type === 'flashcard' ? (
+                        <>
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-front">Front</Label>
+                                <Textarea id="edit-front" value={content.front} onChange={(e) => setContent({ ...content, front: e.target.value })} className="min-h-24" />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="edit-back">Back</Label>
+                                <Textarea id="edit-back" value={content.back} onChange={(e) => setContent({ ...content, back: e.target.value })} className="min-h-24" />
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                             <div className="space-y-2">
+                                <Label htmlFor="edit-text">Question Text</Label>
+                                <Textarea id="edit-text" value={content.text} onChange={(e) => setContent({ ...content, text: e.target.value })} className="min-h-24" />
+                            </div>
+                             <div className="space-y-2">
+                                <Label htmlFor="edit-answer">Answer</Label>
+                                <Input id="edit-answer" value={content.answer} onChange={(e) => setContent({ ...content, answer: e.target.value })} />
+                            </div>
+                            {content.options && content.options.length > 0 && (
+                                <div className="space-y-2">
+                                     <Label>Options</Label>
+                                     <div className="space-y-2">
+                                        {content.options.map((option: string, index: number) => (
+                                            <Input key={index} value={option} onChange={(e) => {
+                                                const newOptions = [...content.options];
+                                                newOptions[index] = e.target.value;
+                                                setContent({ ...content, options: newOptions });
+                                            }} />
+                                        ))}
+                                     </div>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+                 <DialogFooter>
+                    <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                    <Button onClick={handleSave} disabled={loading}>
+                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Save Changes
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
 
 export default function AdminCourseReviewPage() {
   const params = useParams();
   const courseId = params.courseId as string;
   const firestore = useFirestore();
+  const { toast } = useToast();
   const [refreshTopics, setRefreshTopics] = useState(0);
 
 
@@ -322,6 +425,31 @@ export default function AdminCourseReviewPage() {
   const handleContentAdded = () => {
     setRefreshTopics(prev => prev + 1); // Increment to trigger refetch
   };
+
+  const handleDelete = async (type: 'flashcard' | 'question', id: string) => {
+    if (!topicId) return;
+    const collectionPath = type === 'flashcard' ? `courses/${courseId}/topics/${topicId}/flashcards` : `courses/${courseId}/topics/${topicId}/questions`;
+    const itemRef = doc(firestore, collectionPath, id);
+    try {
+        await deleteDoc(itemRef);
+        toast({ title: `${type.charAt(0).toUpperCase() + type.slice(1)} Deleted`, description: `The item has been removed.` });
+    } catch (error: any) {
+        toast({ variant: 'destructive', title: 'Deletion Failed', description: error.message });
+    }
+  };
+
+  const handleApprove = async (type: 'flashcard' | 'question', id: string) => {
+      if (!topicId) return;
+      const collectionPath = type === 'flashcard' ? `courses/${courseId}/topics/${topicId}/flashcards` : `courses/${courseId}/topics/${topicId}/questions`;
+      const itemRef = doc(firestore, collectionPath, id);
+      try {
+          await updateDoc(itemRef, { status: 'approved' });
+          toast({ title: 'Content Approved', description: `The ${type} has been marked as approved.` });
+      } catch (error: any) {
+          toast({ variant: 'destructive', title: 'Approval Failed', description: error.message });
+      }
+  };
+
 
   if (!isLoading && !course) {
     notFound();
@@ -422,13 +550,34 @@ export default function AdminCourseReviewPage() {
                                 {fc.status.replace('-', ' ')}
                             </span>
                         </TableCell>
-                        <TableCell className="text-right space-x-2">
-                          <Button variant="ghost" size="icon">
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                        <TableCell className="text-right space-x-1">
+                            {fc.status !== 'approved' && (
+                                <Button variant="ghost" size="sm" onClick={() => handleApprove('flashcard', fc.id)}>
+                                    <Check className="h-4 w-4 mr-1" /> Approve
+                                </Button>
+                            )}
+                            <EditContentDialog item={fc} topicId={topicId!} courseId={courseId} type="flashcard">
+                                <Button variant="ghost" size="icon">
+                                    <Edit className="h-4 w-4" />
+                                </Button>
+                            </EditContentDialog>
+                             <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                        <AlertDialogDescription>This will permanently delete the flashcard.</AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => handleDelete('flashcard', fc.id)}>Delete</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
                         </TableCell>
                       </TableRow>
                     ))
@@ -473,13 +622,34 @@ export default function AdminCourseReviewPage() {
                                 {q.status.replace('-', ' ')}
                             </span>
                         </TableCell>
-                        <TableCell className="text-right space-x-2">
-                          <Button variant="ghost" size="icon">
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                        <TableCell className="text-right space-x-1">
+                           {q.status !== 'approved' && (
+                                <Button variant="ghost" size="sm" onClick={() => handleApprove('question', q.id)}>
+                                    <Check className="h-4 w-4 mr-1" /> Approve
+                                </Button>
+                            )}
+                          <EditContentDialog item={q} topicId={topicId!} courseId={courseId} type="question">
+                            <Button variant="ghost" size="icon">
+                                <Edit className="h-4 w-4" />
+                            </Button>
+                          </EditContentDialog>
+                          <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                        <AlertDialogDescription>This will permanently delete the question.</AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => handleDelete('question', q.id)}>Delete</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
                         </TableCell>
                       </TableRow>
                     ))
@@ -497,3 +667,5 @@ export default function AdminCourseReviewPage() {
     </div>
   );
 }
+
+    
