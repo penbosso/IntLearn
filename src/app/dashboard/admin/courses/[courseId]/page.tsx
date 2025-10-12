@@ -11,6 +11,14 @@ import {
   CardFooter,
 } from '@/components/ui/card';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -44,7 +52,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Check, CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2, XCircle, File as FileIcon } from 'lucide-react';
+import { Check, CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2, XCircle, File as FileIcon, ChevronDown } from 'lucide-react';
 import { useCollection, useDoc, useMemoFirebase, useAuth, useFirestore, useUser } from '@/firebase';
 import { doc, collection, query, writeBatch, serverTimestamp, deleteDoc, updateDoc, getDoc, setDoc, addDoc } from 'firebase/firestore';
 import {
@@ -58,6 +66,7 @@ import { CreatableCombobox } from "@/components/ui/combobox";
 import { useToast } from '@/hooks/use-toast';
 import { generateFlashcardsAndQuestions } from '@/ai/flows/generate-flashcards-and-questions';
 import { getCurrentUser } from '@/lib/auth';
+import { Checkbox } from '@/components/ui/checkbox';
 
 
 // Helper to read file as a data URL
@@ -335,12 +344,16 @@ function EditContentDialog({ item, topics, originalTopicId, courseId, type, chil
                 const oldDocRef = doc(firestore, `courses/${courseId}/topics/${originalTopicId}/${collectionName}`, item.id);
                 const newDocRef = doc(firestore, `courses/${courseId}/topics/${selectedTopicId}/${collectionName}`, item.id);
                 
+                const currentDocSnapshot = await getDoc(oldDocRef);
+                const currentData = currentDocSnapshot.data();
+
                 const updatedContent = { 
+                    ...currentData,
                     ...content, 
                     topicId: selectedTopicId,
-                    // ensure adminId is present
-                    adminId: content.adminId || firebaseUser.uid 
+                    adminId: currentData?.adminId || firebaseUser.uid 
                 };
+
                 batch.set(newDocRef, updatedContent);
                 batch.delete(oldDocRef);
 
@@ -450,6 +463,11 @@ export default function AdminCourseReviewPage() {
   const { toast } = useToast();
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const [selectedFlashcards, setSelectedFlashcards] = useState<string[]>([]);
+  const [selectedQuestions, setSelectedQuestions] = useState<string[]>([]);
+  const [bulkActionTopic, setBulkActionTopic] = useState('');
+  const [isBulkTopicDialogOpen, setIsBulkTopicDialogOpen] = useState(false);
+
 
   // Memoize Firestore references
   const courseRef = useMemoFirebase(() => firestore && courseId ? doc(firestore, 'courses', courseId) : null, [firestore, courseId]);
@@ -486,6 +504,12 @@ export default function AdminCourseReviewPage() {
         setTopicId(null);
     }
   }, [topics, areTopicsLoading, topicId]);
+  
+  // Clear selections when topic changes
+  useEffect(() => {
+    setSelectedFlashcards([]);
+    setSelectedQuestions([]);
+  }, [topicId])
 
   const flashcardsRef = useMemoFirebase(() => firestore && courseId && topicId ? collection(firestore, `courses/${courseId}/topics/${topicId}/flashcards`) : null, [firestore, courseId, topicId, refreshKey]);
   const questionsRef = useMemoFirebase(() => firestore && courseId && topicId ? collection(firestore, `courses/${courseId}/topics/${topicId}/questions`) : null, [firestore, courseId, topicId, refreshKey]);
@@ -523,6 +547,96 @@ export default function AdminCourseReviewPage() {
           toast({ variant: 'destructive', title: 'Approval Failed', description: error.message });
       }
   };
+  
+   const handleBulkApprove = async (type: 'flashcard' | 'question') => {
+    const selectedIds = type === 'flashcard' ? selectedFlashcards : selectedQuestions;
+    if (selectedIds.length === 0 || !topicId) return;
+
+    const collectionPath = type === 'flashcard' ? 'flashcards' : 'questions';
+    const batch = writeBatch(firestore);
+
+    selectedIds.forEach(id => {
+      const itemRef = doc(firestore, `courses/${courseId}/topics/${topicId}/${collectionPath}`, id);
+      batch.update(itemRef, { status: 'approved' });
+    });
+
+    try {
+      await batch.commit();
+      toast({
+        title: 'Bulk Approval Successful',
+        description: `${selectedIds.length} items have been approved.`,
+      });
+      if (type === 'flashcard') setSelectedFlashcards([]);
+      else setSelectedQuestions([]);
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Bulk Approval Failed', description: error.message });
+    }
+  };
+  
+  const handleInitiateBulkTopicChange = (type: 'flashcard' | 'question') => {
+    const selectedIds = type === 'flashcard' ? selectedFlashcards : selectedQuestions;
+    if (selectedIds.length === 0) return;
+    setBulkActionTopic(''); // Reset topic state
+    setIsBulkTopicDialogOpen(true); // Open the topic selection dialog
+  };
+
+  const handleConfirmBulkTopicChange = async (type: 'flashcard' | 'question') => {
+    if (!bulkActionTopic || !topicId) return;
+
+    const selectedIds = type === 'flashcard' ? selectedFlashcards : selectedQuestions;
+    const collectionName = type === 'flashcard' ? 'flashcards' : 'questions';
+    const batch = writeBatch(firestore);
+    
+    let newTopicId = bulkActionTopic;
+
+    // Check if the topic exists or needs to be created
+    const existingTopic = topics?.find(t => t.id === bulkActionTopic || t.name === bulkActionTopic);
+    if (!existingTopic) {
+        const newTopicRef = doc(collection(firestore, `courses/${courseId}/topics`));
+        batch.set(newTopicRef, {
+            name: bulkActionTopic,
+            description: `New topic: ${bulkActionTopic}`,
+            courseId,
+            adminId: course?.adminId,
+            createdAt: serverTimestamp(),
+        });
+        newTopicId = newTopicRef.id;
+    } else {
+        newTopicId = existingTopic.id;
+    }
+
+    try {
+        // We must read the documents first to move them
+        for (const id of selectedIds) {
+            const oldDocRef = doc(firestore, `courses/${courseId}/topics/${topicId}/${collectionName}`, id);
+            const newDocRef = doc(firestore, `courses/${courseId}/topics/${newTopicId}/${collectionName}`, id);
+
+            const docSnapshot = await getDoc(oldDocRef);
+            if (docSnapshot.exists()) {
+                const data = docSnapshot.data();
+                batch.set(newDocRef, { ...data, topicId: newTopicId });
+                batch.delete(oldDocRef);
+            }
+        }
+        
+        await batch.commit();
+
+        toast({
+            title: 'Bulk Topic Change Successful',
+            description: `${selectedIds.length} items moved to topic "${existingTopic?.name || bulkActionTopic}".`,
+        });
+        
+        handleContentRefresh();
+        if (type === 'flashcard') setSelectedFlashcards([]);
+        else setSelectedQuestions([]);
+        setIsBulkTopicDialogOpen(false);
+
+    } catch (error: any) {
+        console.error('Bulk topic change failed', error);
+        toast({ variant: 'destructive', title: 'Bulk Topic Change Failed', description: error.message });
+    }
+  };
+
 
   const handlePublish = async () => {
     if (!courseRef) return;
@@ -557,6 +671,9 @@ export default function AdminCourseReviewPage() {
             return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
     }
   };
+
+  const topicOptions = useMemo(() => topics?.map(t => ({ value: t.id, label: t.name })) || [], [topics]);
+
 
   if (isLoading && !hasTimedOut) {
     return <div className="flex h-full w-full items-center justify-center">
@@ -617,14 +734,43 @@ export default function AdminCourseReviewPage() {
           <Card>
             <CardHeader>
               <CardTitle>Generated Flashcards</CardTitle>
-              <CardDescription>
-                Review and edit the generated flashcards before publishing.
-              </CardDescription>
+              <div className="flex justify-between items-center">
+                 <CardDescription>
+                    Review and edit the generated flashcards before publishing.
+                </CardDescription>
+                {selectedFlashcards.length > 0 && (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline">
+                                Actions <ChevronDown className="ml-2 h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleBulkApprove('flashcard')}>Approve ({selectedFlashcards.length})</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleInitiateBulkTopicChange('flashcard')}>
+                                Change Topic ({selectedFlashcards.length})
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[50px]">
+                        <Checkbox
+                            checked={selectedFlashcards.length > 0 && selectedFlashcards.length === flashcards?.length}
+                            onCheckedChange={(checked) => {
+                                if (checked && flashcards) {
+                                    setSelectedFlashcards(flashcards.map(fc => fc.id));
+                                } else {
+                                    setSelectedFlashcards([]);
+                                }
+                            }}
+                        />
+                    </TableHead>
                     <TableHead>Front</TableHead>
                     <TableHead>Back</TableHead>
                     <TableHead>Status</TableHead>
@@ -633,10 +779,22 @@ export default function AdminCourseReviewPage() {
                 </TableHeader>
                 <TableBody>
                   {isContentLoading && topicId ? (
-                     <TableRow><TableCell colSpan={4} className="text-center">Loading flashcards...</TableCell></TableRow>
+                     <TableRow><TableCell colSpan={5} className="text-center">Loading flashcards...</TableCell></TableRow>
                   ) : flashcards && flashcards.length > 0 ? (
                     flashcards.map((fc) => (
-                      <TableRow key={fc.id}>
+                      <TableRow key={fc.id} data-state={selectedFlashcards.includes(fc.id) && "selected"}>
+                        <TableCell>
+                            <Checkbox
+                                checked={selectedFlashcards.includes(fc.id)}
+                                onCheckedChange={(checked) => {
+                                    if (checked) {
+                                        setSelectedFlashcards(prev => [...prev, fc.id]);
+                                    } else {
+                                        setSelectedFlashcards(prev => prev.filter(id => id !== fc.id));
+                                    }
+                                }}
+                            />
+                        </TableCell>
                         <TableCell className="font-medium max-w-xs truncate">{fc.front}</TableCell>
                         <TableCell className="max-w-xs truncate">{fc.back}</TableCell>
                         <TableCell>
@@ -676,7 +834,7 @@ export default function AdminCourseReviewPage() {
                       </TableRow>
                     ))
                   ) : (
-                    <TableRow><TableCell colSpan={4} className="text-center">
+                    <TableRow><TableCell colSpan={5} className="text-center">
                         {topicId ? 'No flashcards found for this topic.' : 'Please select a topic to see its flashcards.'}
                     </TableCell></TableRow>
                   )}
@@ -689,14 +847,43 @@ export default function AdminCourseReviewPage() {
           <Card>
             <CardHeader>
               <CardTitle>Generated Quiz Questions</CardTitle>
-              <CardDescription>
-                Review and edit the generated questions for quizzes.
-              </CardDescription>
+               <div className="flex justify-between items-center">
+                <CardDescription>
+                    Review and edit the generated questions for quizzes.
+                </CardDescription>
+                {selectedQuestions.length > 0 && (
+                     <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline">
+                                Actions <ChevronDown className="ml-2 h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleBulkApprove('question')}>Approve ({selectedQuestions.length})</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleInitiateBulkTopicChange('question')}>
+                                Change Topic ({selectedQuestions.length})
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[50px]">
+                         <Checkbox
+                            checked={selectedQuestions.length > 0 && selectedQuestions.length === questions?.length}
+                            onCheckedChange={(checked) => {
+                                if (checked && questions) {
+                                    setSelectedQuestions(questions.map(q => q.id));
+                                } else {
+                                    setSelectedQuestions([]);
+                                }
+                            }}
+                        />
+                    </TableHead>
                     <TableHead>Question</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Status</TableHead>
@@ -705,10 +892,22 @@ export default function AdminCourseReviewPage() {
                 </TableHeader>
                 <TableBody>
                    {isContentLoading && topicId ? (
-                     <TableRow><TableCell colSpan={4} className="text-center">Loading questions...</TableCell></TableRow>
+                     <TableRow><TableCell colSpan={5} className="text-center">Loading questions...</TableCell></TableRow>
                   ) : questions && questions.length > 0 ? (
                     questions.map((q) => (
-                      <TableRow key={q.id}>
+                      <TableRow key={q.id} data-state={selectedQuestions.includes(q.id) && "selected"}>
+                        <TableCell>
+                            <Checkbox
+                                checked={selectedQuestions.includes(q.id)}
+                                onCheckedChange={(checked) => {
+                                    if (checked) {
+                                        setSelectedQuestions(prev => [...prev, q.id]);
+                                    } else {
+                                        setSelectedQuestions(prev => prev.filter(id => id !== q.id));
+                                    }
+                                }}
+                            />
+                        </TableCell>
                         <TableCell className="font-medium max-w-sm truncate">{q.text}</TableCell>
                         <TableCell>{q.type}</TableCell>
                         <TableCell>
@@ -748,7 +947,7 @@ export default function AdminCourseReviewPage() {
                       </TableRow>
                     ))
                   ) : (
-                     <TableRow><TableCell colSpan={4} className="text-center">
+                     <TableRow><TableCell colSpan={5} className="text-center">
                         {topicId ? 'No questions found for this topic.' : 'Please select a topic to see its questions.'}
                      </TableCell></TableRow>
                   )}
@@ -758,6 +957,31 @@ export default function AdminCourseReviewPage() {
           </Card>
         </TabsContent>
       </Tabs>
+      
+      {/* Dialog for bulk topic change */}
+      <Dialog open={isBulkTopicDialogOpen} onOpenChange={setIsBulkTopicDialogOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Change Topic for Selected Items</DialogTitle>
+                <DialogDescription>Select a new topic for the selected items, or create a new one.</DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+                <CreatableCombobox
+                    options={topicOptions}
+                    value={bulkActionTopic}
+                    onChange={setBulkActionTopic}
+                    onCreate={(newTopicName) => setBulkActionTopic(newTopicName)}
+                    placeholder="Select or create a new topic..."
+                />
+            </div>
+            <DialogFooter>
+                <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
+                <Button onClick={() => handleConfirmBulkTopicChange(selectedFlashcards.length > 0 ? 'flashcard' : 'question')}>
+                    Move Items
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
