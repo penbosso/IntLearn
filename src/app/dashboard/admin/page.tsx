@@ -36,11 +36,9 @@ export default function AdminDashboardPage() {
   
   const { data: courses, isLoading: areCoursesLoading } = useCollection<Course>(coursesQuery);
 
-  const studentsQuery = useMemoFirebase(
-    () => firestore ? query(collection(firestore, 'users'), where('role', '==', 'student')) : null,
-    [firestore]
-  );
-  const { data: students, isLoading: areStudentsLoading } = useCollection(studentsQuery);
+  // More focused query: get all students enrolled in the admin's courses.
+  // This is still potentially large, so we will remove it for now and rely on the dedicated students page.
+  // const { data: students, isLoading: areStudentsLoading } = useCollection(studentsQuery);
 
   const allAttemptsQuery = useMemoFirebase(
     () => firestore ? query(collectionGroup(firestore, 'quizAttempts')) : null,
@@ -60,7 +58,7 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const isLoading = areCoursesLoading || areStudentsLoading || areAttemptsLoading;
+  const isLoading = areCoursesLoading || areAttemptsLoading;
 
   return (
     <div className="space-y-6">
@@ -84,10 +82,10 @@ export default function AdminDashboardPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {areStudentsLoading ? <Loader2 className="h-6 w-6 animate-spin"/> :
+            {isLoading ? <Loader2 className="h-6 w-6 animate-spin"/> :
                 <>
-                    <div className="text-2xl font-bold">{students?.length || 0}</div>
-                    <p className="text-xs text-muted-foreground">students have enrolled</p>
+                    <div className="text-2xl font-bold">...</div>
+                    <p className="text-xs text-muted-foreground">View students in dedicated tab</p>
                 </>
             }
           </CardContent>
@@ -171,7 +169,7 @@ export default function AdminDashboardPage() {
                 <TableRow key={course.id}>
                   <TableCell className="font-medium">{course.name}</TableCell>
                   <TableCell>
-                    <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${getStatusBadge(course.status)}`}>
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${getStatusBadge(course.status || 'Draft')}`}>
                       {course.status || 'Draft'}
                     </span>
                   </TableCell>
