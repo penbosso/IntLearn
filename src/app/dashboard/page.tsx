@@ -10,7 +10,8 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { BookOpenCheck, Flame, Zap, ArrowRight, Book, Edit, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { BookOpenCheck, Flame, Zap, ArrowRight, Book, Edit, Loader2, Search } from 'lucide-react';
 import { getCurrentUser } from '@/lib/auth';
 import Image from 'next/image';
 import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
@@ -105,6 +106,7 @@ function ContinueLearningCard() {
 export default function DashboardPage() {
   const { user: firebaseUser, isUserLoading } = useUser();
   const [user, setUser] = useState<User | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const firestore = useFirestore();
 
   const coursesQuery = useMemoFirebase(
@@ -133,17 +135,36 @@ export default function DashboardPage() {
     }
   }, [enrollments]);
 
+  const filteredCourses = useMemo(() => {
+    return courses?.filter(course => 
+        course.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        course.description.toLowerCase().includes(searchTerm.toLowerCase())
+    ) || [];
+  }, [courses, searchTerm]);
+
+
   if (isUserLoading || !user || areCoursesLoading || areEnrollmentsLoading) {
     return <div>Loading dashboard...</div>;
   }
 
-  const enrolledCourses = courses?.filter(c => enrolledCourseIds.includes(c.id)) || [];
-  const otherCourses = courses?.filter(c => !enrolledCourseIds.includes(c.id)) || [];
+  const enrolledCourses = filteredCourses.filter(c => enrolledCourseIds.includes(c.id)) || [];
+  const otherCourses = filteredCourses.filter(c => !enrolledCourseIds.includes(c.id)) || [];
 
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold font-headline">Welcome back, {user.name.split(' ')[0]}!</h1>
+      <div className="flex flex-col md:flex-row gap-4 justify-between md:items-center">
+        <h1 className="text-3xl font-bold font-headline">Welcome back, {user.name.split(' ')[0]}!</h1>
+        <div className="relative md:w-1/3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+            <Input 
+                placeholder="Search courses..."
+                className="pl-10"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+            />
+        </div>
+      </div>
       
       <ContinueLearningCard />
 
@@ -174,7 +195,7 @@ export default function DashboardPage() {
             <BookOpenCheck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0 / {enrolledCourses.length}</div>
+            <div className="text-2xl font-bold">0 / {enrolledCourseIds.length}</div>
             <p className="text-xs text-muted-foreground">Let's get started!</p>
           </CardContent>
         </Card>
@@ -188,10 +209,12 @@ export default function DashboardPage() {
               <CourseCard key={course.id} course={course} />
             ))
            ) : (
-                <Card className="flex flex-col items-center justify-center text-center p-6 bg-secondary/50 border-dashed">
+                <Card className="md:col-span-3 flex flex-col items-center justify-center text-center p-6 bg-secondary/50 border-dashed">
                     <CardHeader>
-                        <CardTitle>No Courses Yet</CardTitle>
-                        <CardDescription>Start your learning journey by enrolling in a course below.</CardDescription>
+                        <CardTitle>{searchTerm ? 'No Matching Courses' : 'No Courses Yet'}</CardTitle>
+                        <CardDescription>
+                            {searchTerm ? 'No courses in your library match your search.' : 'Start your learning journey by enrolling in a course below.'}
+                        </CardDescription>
                     </CardHeader>
                 </Card>
             )}
@@ -201,9 +224,20 @@ export default function DashboardPage() {
        <div>
         <h2 className="text-2xl font-bold mb-4 font-headline">Discover New Courses</h2>
         <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-          {otherCourses.map((course) => (
-            <CourseCard key={course.id} course={course} enroll />
-          ))}
+          {otherCourses.length > 0 ? (
+            otherCourses.map((course) => (
+              <CourseCard key={course.id} course={course} enroll />
+            ))
+           ) : (
+                <Card className="md:col-span-3 flex flex-col items-center justify-center text-center p-6 bg-secondary/50 border-dashed">
+                    <CardHeader>
+                        <CardTitle>No New Courses</CardTitle>
+                        <CardDescription>
+                            {searchTerm ? 'No available courses match your search.' : 'You are enrolled in all available courses.'}
+                        </CardDescription>
+                    </CardHeader>
+                </Card>
+           )}
         </div>
       </div>
     </div>
@@ -298,3 +332,5 @@ function CourseCard({ course, enroll = false }: CourseCardProps) {
     </Card>
   )
 }
+
+    
