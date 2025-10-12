@@ -262,7 +262,8 @@ function CourseCard({ course, enroll = false }: CourseCardProps) {
     const { progress, isLoading: isProgressLoading } = useCourseProgress(course.id);
 
 
-    const handleEnroll = async () => {
+    const handleEnroll = async (e: React.MouseEvent) => {
+        e.preventDefault(); // Prevent navigation when clicking the button
         if (!firebaseUser) {
             toast({
                 variant: "destructive",
@@ -299,7 +300,7 @@ function CourseCard({ course, enroll = false }: CourseCardProps) {
 
   return (
     <Card className="overflow-hidden transition-all hover:shadow-lg hover:-translate-y-1 flex flex-col">
-      <Link href={`/dashboard/courses/${course.id}`} className="block">
+      <Link href={`/dashboard/courses/${course.id}`} className="block flex-grow">
         <Image
           src={course.imageUrl || 'https://picsum.photos/seed/placeholder/600/400'}
           alt={course.name}
@@ -308,11 +309,11 @@ function CourseCard({ course, enroll = false }: CourseCardProps) {
           data-ai-hint={course.imageHint}
           className="h-48 w-full object-cover"
         />
+        <CardHeader>
+            <CardTitle>{course.name}</CardTitle>
+            <CardDescription className="h-10">{course.description}</CardDescription>
+        </CardHeader>
       </Link>
-      <CardHeader>
-        <CardTitle>{course.name}</CardTitle>
-        <CardDescription className="h-10">{course.description}</CardDescription>
-      </CardHeader>
       <CardContent className="mt-auto">
         {enroll ? (
              <Button className="w-full" onClick={handleEnroll} disabled={isEnrolling}>
