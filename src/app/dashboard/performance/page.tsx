@@ -1,3 +1,5 @@
+'use client';
+
 import {
   Card,
   CardContent,
@@ -15,12 +17,28 @@ import {
 } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import PerformanceCharts from '@/components/performance-charts';
-import { getLeaderboard } from '@/lib/data';
 import { Target, CheckCircle, BarChart, Trophy } from 'lucide-react';
 import type { User } from '@/lib/auth';
+import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { collection, query, where, orderBy } from 'firebase/firestore';
+import { useMemo } from 'react';
 
-export default async function PerformancePage() {
-  const leaderboardData = await getLeaderboard() as User[];
+export default function PerformancePage() {
+    const firestore = useFirestore();
+
+    const leaderboardQuery = useMemoFirebase(
+      () =>
+        firestore
+          ? query(
+              collection(firestore, 'users'),
+              where('role', '==', 'student'),
+              orderBy('xp', 'desc')
+            )
+          : null,
+      [firestore]
+    );
+
+    const { data: leaderboardData, isLoading } = useCollection<User>(leaderboardQuery);
 
   return (
     <div className="space-y-6">
@@ -91,14 +109,17 @@ export default async function PerformancePage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {leaderboardData.map((user, index) => (
+              {isLoading && (
+                 <TableRow><TableCell colSpan={3} className="text-center">Loading leaderboard...</TableCell></TableRow>
+              )}
+              {leaderboardData?.map((user, index) => (
                 <TableRow key={user.id}>
                   <TableCell className="font-medium text-lg">{index + 1}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <Avatar>
                         <AvatarImage src={user.avatarUrl} />
-                        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                        <AvatarFallback>{user.name?.charAt(0) || 'U'}</AvatarFallback>
                       </Avatar>
                       <div>
                         <p className="font-medium">{user.name}</p>
@@ -109,6 +130,9 @@ export default async function PerformancePage() {
                   <TableCell className="text-right font-bold text-lg">{user.xp.toLocaleString()}</TableCell>
                 </TableRow>
               ))}
+               {!isLoading && leaderboardData?.length === 0 && (
+                  <TableRow><TableCell colSpan={3} className="text-center">No students on the leaderboard yet.</TableCell></TableRow>
+               )}
             </TableBody>
           </Table>
         </CardContent>
