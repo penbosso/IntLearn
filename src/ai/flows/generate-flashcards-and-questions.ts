@@ -13,7 +13,8 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const GenerateFlashcardsAndQuestionsInputSchema = z.object({
-  courseMaterial: z.string().describe('The course material to process. Can be text, the content of a PDF, or the extracted text from an image.'),
+  courseMaterial: z.string().describe('The course material to process. Can be text, or a data URI for an image/PDF.'),
+  materialType: z.enum(['text', 'image', 'pdf']).describe('The type of the material provided.'),
 });
 
 export type GenerateFlashcardsAndQuestionsInput = z.infer<typeof GenerateFlashcardsAndQuestionsInputSchema>;
@@ -46,9 +47,14 @@ const generateFlashcardsAndQuestionsPrompt = ai.definePrompt({
   Your goal is to help admins quickly create learning resources for their students.
 
   Given the following course material, please generate flashcards and questions.
+  The material is of type: {{{materialType}}}
 
   Course Material:
-  {{courseMaterial}}
+  {{#if (eq materialType 'text')}}
+    {{{courseMaterial}}}
+  {{else}}
+    {{media url=courseMaterial}}
+  {{/if}}
 
   Flashcards should have a clear question or concept on the front and a concise answer or explanation on the back.
 
