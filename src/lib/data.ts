@@ -1,8 +1,6 @@
 // This file is now primarily for types and mock data for leaderboards.
 // Course and topic data will be fetched directly from Firestore in components.
 
-import { PlaceHolderImages } from './placeholder-images';
-
 export type Course = {
   id: string;
   name: string;
@@ -33,6 +31,17 @@ export type Question = {
   options?: string[];
   answer: string;
 };
+
+export type QuizAttempt = {
+  id: string;
+  userId: string;
+  quizId: string; // This corresponds to a topicId
+  score: number;
+  attemptedDate: any; // Firestore Timestamp
+  correctAnswers: number;
+  totalQuestions: number;
+};
+
 
 export type StudentProgress = {
   studentId: string;

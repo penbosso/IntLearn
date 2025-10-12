@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Book, Edit } from 'lucide-react';
 import { useDoc, useCollection, useMemoFirebase, useFirestore } from '@/firebase';
 import { doc, collection } from 'firebase/firestore';
+import { useCourseProgress } from '@/hooks/use-course-progress';
 
 
 export default function CourseDetailPage() {
@@ -32,14 +33,13 @@ export default function CourseDetailPage() {
 
   const { data: course, isLoading: isCourseLoading } = useDoc(courseRef);
   const { data: topics, isLoading: areTopicsLoading } = useCollection(topicsRef);
+  const { progress, completedTopics, isLoading: isProgressLoading } = useCourseProgress(courseId);
   
-  // Mocking progress for now
-  const progress = { completedTopics: topics ? [topics[0]?.id].filter(Boolean) : [] };
   const totalTopics = topics?.length || 0;
-  const completedTopicsCount = progress?.completedTopics.length || 0;
-  const courseCompletion = totalTopics > 0 ? (completedTopicsCount / totalTopics) * 100 : 0;
+  const completedTopicsCount = completedTopics.length;
+  const courseCompletion = progress;
 
-  const isLoading = isCourseLoading || areTopicsLoading;
+  const isLoading = isCourseLoading || areTopicsLoading || isProgressLoading;
 
   if (isLoading) {
     return <div>Loading course details...</div>
@@ -91,7 +91,7 @@ export default function CourseDetailPage() {
                   <AccordionItem value={`item-${index}`} key={topic.id}>
                     <AccordionTrigger className="px-6 hover:no-underline">
                         <div className='flex items-center gap-3'>
-                            <div className={`w-3 h-3 rounded-full ${progress?.completedTopics.includes(topic.id) ? 'bg-green-500' : 'bg-muted'}`}></div>
+                            <div className={`w-3 h-3 rounded-full ${completedTopics.includes(topic.id) ? 'bg-green-500' : 'bg-muted'}`}></div>
                             <span>{topic.name}</span>
                         </div>
                     </AccordionTrigger>

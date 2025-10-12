@@ -10,14 +10,15 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { BookOpenCheck, Flame, Zap, PlusCircle } from 'lucide-react';
+import { BookOpenCheck, Flame, Zap } from 'lucide-react';
 import { getCurrentUser } from '@/lib/auth';
 import Image from 'next/image';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { useEffect, useState } from 'react';
 import type { User } from '@/lib/auth';
-import { collection, query, where, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { useCourseProgress } from '@/hooks/use-course-progress';
 
 
 type Course = {
@@ -109,7 +110,7 @@ export default function DashboardPage() {
         <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
           {enrolledCourses.length > 0 ? (
             enrolledCourses.map((course) => (
-              <CourseCard key={course.id} course={course} progress={Math.random() * 100} />
+              <CourseCard key={course.id} course={course} />
             ))
            ) : (
                 <Card className="flex flex-col items-center justify-center text-center p-6 bg-secondary/50 border-dashed">
@@ -142,15 +143,16 @@ type CourseCardProps = {
         imageUrl: string;
         imageHint: string;
     };
-    progress?: number;
     enroll?: boolean;
 }
 
-function CourseCard({ course, progress, enroll = false }: CourseCardProps) {
+function CourseCard({ course, enroll = false }: CourseCardProps) {
     const { user: firebaseUser } = useUser();
     const firestore = useFirestore();
     const { toast } = useToast();
     const [isEnrolling, setIsEnrolling] = useState(false);
+    const { progress, isLoading: isProgressLoading } = useCourseProgress(course.id);
+
 
     const handleEnroll = async () => {
         if (!firebaseUser) {
@@ -209,15 +211,13 @@ function CourseCard({ course, progress, enroll = false }: CourseCardProps) {
                 {isEnrolling ? 'Enrolling...' : 'Enroll Now'}
              </Button>
         ) : (
-          progress !== undefined && (
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm text-muted-foreground">Progress</span>
-                <span className="text-sm font-bold">{Math.round(progress)}%</span>
-              </div>
-              <Progress value={progress} className="h-2" />
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm text-muted-foreground">Progress</span>
+              <span className="text-sm font-bold">{isProgressLoading ? '...' : `${Math.round(progress)}%`}</span>
             </div>
-          )
+            <Progress value={isProgressLoading ? 0 : progress} className="h-2" />
+          </div>
         )}
       </CardContent>
     </Card>
