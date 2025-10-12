@@ -17,7 +17,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
-import { Book, Edit } from 'lucide-react';
+import { Book, Edit, Loader2 } from 'lucide-react';
 import { useDoc, useCollection, useMemoFirebase, useFirestore } from '@/firebase';
 import { doc, collection } from 'firebase/firestore';
 import { useCourseProgress } from '@/hooks/use-course-progress';
@@ -35,14 +35,18 @@ export default function CourseDetailPage() {
   const { data: topics, isLoading: areTopicsLoading } = useCollection(topicsRef);
   const { progress, completedTopics, isLoading: isProgressLoading } = useCourseProgress(courseId);
   
+  const isLoading = isCourseLoading || areTopicsLoading || isProgressLoading;
+  
   const totalTopics = topics?.length || 0;
   const completedTopicsCount = completedTopics.length;
   const courseCompletion = progress;
 
-  const isLoading = isCourseLoading || areTopicsLoading || isProgressLoading;
 
   if (isLoading) {
-    return <div>Loading course details...</div>
+    return <div className="flex h-full w-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-4">Loading course details...</span>
+    </div>
   }
 
   if (!course) {
