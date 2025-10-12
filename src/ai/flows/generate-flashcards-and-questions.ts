@@ -12,9 +12,13 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
+const MaterialSchema = z.object({
+  type: z.enum(['text', 'image', 'pdf']).describe('The type of the material provided.'),
+  content: z.string().describe('The course material to process. Can be text, or a data URI for an image/PDF.'),
+});
+
 const GenerateFlashcardsAndQuestionsInputSchema = z.object({
-  courseMaterial: z.string().describe('The course material to process. Can be text, or a data URI for an image/PDF.'),
-  materialType: z.enum(['text', 'image', 'pdf']).describe('The type of the material provided.'),
+  materials: z.array(MaterialSchema).describe('An array of course materials to process.'),
 });
 
 export type GenerateFlashcardsAndQuestionsInput = z.infer<typeof GenerateFlashcardsAndQuestionsInputSchema>;
@@ -46,19 +50,21 @@ const generateFlashcardsAndQuestionsPrompt = ai.definePrompt({
 
   Your goal is to help admins quickly create learning resources for their students.
 
-  Given the following course material, please generate flashcards and questions.
-  The material is of type: {{{materialType}}}
-
-  Course Material:
-  {{#if (eq materialType 'text')}}
-    {{{courseMaterial}}}
+  Given the following course materials, please generate a unified set of flashcards and questions.
+  
+  {{#each materials}}
+  Material (Type: {{{this.type}}}):
+  {{#if (eq this.type 'text')}}
+    {{{this.content}}}
   {{else}}
-    {{media url=courseMaterial}}
+    {{media url=this.content}}
   {{/if}}
+  ---
+  {{/each}}
 
   Flashcards should have a clear question or concept on the front and a concise answer or explanation on the back.
 
-  Questions should be of various types: multiple choice (MCQ), true/false, and short answer. For multiple choice questions, provide several options, one of which is the correct answer.  Each question should have a single correct answer.  There should be an 'options' field if and only if the question 'type' is 'MCQ'.
+  Questions should be of various types: multiple choice (MCQ), true/false, and short answer. For multiple choice questions, provide several options, one of which is the correct answer. Each question should have a single correct answer. There should be an 'options' field if and only if the question 'type' is 'MCQ'.
 
   Present the output in a JSON format that adheres to the following schema:
   ${JSON.stringify(GenerateFlashcardsAndQuestionsOutputSchema.describe('schema for output'))}

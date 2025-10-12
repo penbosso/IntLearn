@@ -12,7 +12,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { UploadCloud, Loader2 } from 'lucide-react';
+import { UploadCloud, Loader2, File as FileIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
@@ -28,16 +28,12 @@ import {
 import { getCurrentUser } from '@/lib/auth';
 
 // Helper to read file as text or data URL
-const readFileAs = (file: File, as: 'text' | 'dataURL'): Promise<string> => {
+const readFileAsDataURL = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = reject;
-    if (as === 'text') {
-      reader.readAsText(file);
-    } else {
-      reader.readAsDataURL(file);
-    }
+    reader.readAsDataURL(file);
   });
 };
 
@@ -49,7 +45,7 @@ export default function NewCoursePage() {
   const [loading, setLoading] = useState(false);
   const [courseTitle, setCourseTitle] = useState('');
   const [textContent, setTextContent] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[] | null>(null);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -61,7 +57,7 @@ export default function NewCoursePage() {
       });
       return;
     }
-    if (!textContent.trim() && !file) {
+    if (!textContent.trim() && (!files || files.length === 0)) {
       toast({
         variant: 'destructive',
         title: 'No Content Provided',
@@ -88,27 +84,25 @@ export default function NewCoursePage() {
         throw new Error('You must be an administrator to create a course.');
       }
 
-      let courseMaterial = textContent;
-      let materialType: 'text' | 'image' | 'pdf' = 'text';
+      const materials: { type: 'text' | 'image' | 'pdf', content: string }[] = [];
 
-      if (file) {
-        if (file.type.startsWith('image/')) {
-          courseMaterial = await readFileAs(file, 'dataURL');
-          materialType = 'image';
-        } else if (file.type === 'application/pdf') {
-          // Future: Implement PDF text extraction. For now, we'll send as data URL.
-          courseMaterial = await readFileAs(file, 'dataURL');
-          materialType = 'pdf';
-        } else {
-          courseMaterial = await readFileAs(file, 'text');
-          materialType = 'text';
+      if (textContent.trim()) {
+        materials.push({ type: 'text', content: textContent });
+      }
+
+      if (files && files.length > 0) {
+        for (const file of files) {
+          const dataUrl = await readFileAsDataURL(file);
+          let type: 'image' | 'pdf' | 'text' = 'text';
+          if (file.type.startsWith('image/')) type = 'image';
+          else if (file.type === 'application/pdf') type = 'pdf';
+          materials.push({ type, content: dataUrl });
         }
       }
 
       // 1. Call the Genkit flow
       const result = await generateFlashcardsAndQuestions({
-        courseMaterial: courseMaterial,
-        materialType: materialType,
+        materials,
       });
 
       // 2. Save the generated content to Firestore in a batch
@@ -208,7 +202,7 @@ export default function NewCoursePage() {
 
             <div className="space-y-2">
               <Label htmlFor="materials">
-                Upload Materials (PDF, Image, etc.)
+                Upload Materials (PDF, Images, etc.)
               </Label>
               <div className="flex items-center justify-center w-full">
                 <label
@@ -217,10 +211,15 @@ export default function NewCoursePage() {
                 >
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
                     <UploadCloud className="w-8 h-8 mb-4 text-muted-foreground" />
-                    {file ? (
-                      <p className="font-semibold text-sm text-foreground">
-                        {file.name}
-                      </p>
+                    {files && files.length > 0 ? (
+                      <div className="flex flex-wrap justify-center gap-2">
+                        {Array.from(files).map(file => (
+                          <div key={file.name} className="flex items-center gap-2 bg-background border rounded-md px-2 py-1 text-xs">
+                            <FileIcon className="h-4 w-4" />
+                            <span>{file.name}</span>
+                          </div>
+                        ))}
+                      </div>
                     ) : (
                       <>
                         <p className="mb-2 text-sm text-muted-foreground">
@@ -228,7 +227,7 @@ export default function NewCoursePage() {
                           or drag and drop
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          PDF, PNG, JPG or TXT
+                          PDF, PNG, JPG, TXT, etc.
                         </p>
                       </>
                     )}
@@ -236,8 +235,9 @@ export default function NewCoursePage() {
                   <Input
                     id="dropzone-file"
                     type="file"
+                    multiple
                     className="hidden"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    onChange={(e) => setFiles(e.target.files ? Array.from(e.target.files) : null)}
                   />
                 </label>
               </div>

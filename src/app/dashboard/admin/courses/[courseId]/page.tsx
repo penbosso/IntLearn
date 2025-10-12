@@ -44,7 +44,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Check, CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2, XCircle } from 'lucide-react';
+import { Check, CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2, XCircle, File as FileIcon } from 'lucide-react';
 import { useCollection, useDoc, useMemoFirebase, useAuth, useFirestore, useUser } from '@/firebase';
 import { doc, collection, query, writeBatch, serverTimestamp, deleteDoc, updateDoc } from 'firebase/firestore';
 import {
@@ -59,17 +59,13 @@ import { generateFlashcardsAndQuestions } from '@/ai/flows/generate-flashcards-a
 import { getCurrentUser } from '@/lib/auth';
 
 
-// Helper to read file as text or data URL
-const readFileAs = (file: File, as: 'text' | 'dataURL'): Promise<string> => {
+// Helper to read file as a data URL
+const readFileAsDataURL = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = reject;
-    if (as === 'text') {
-      reader.readAsText(file);
-    } else {
-      reader.readAsDataURL(file);
-    }
+    reader.readAsDataURL(file);
   });
 };
 
@@ -81,7 +77,7 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
   const [loading, setLoading] = useState(false);
   const [topicName, setTopicName] = useState('');
   const [textContent, setTextContent] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[] | null>(null);
   const [open, setOpen] = useState(false);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -94,11 +90,11 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
       });
       return;
     }
-    if (!textContent.trim() && !file) {
+    if (!textContent.trim() && (!files || files.length === 0)) {
       toast({
         variant: 'destructive',
         title: 'No Content Provided',
-        description: 'Please either paste text content or upload a file.',
+        description: 'Please either paste text content or upload one or more files.',
       });
       return;
     }
@@ -119,26 +115,24 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
         throw new Error('You must be an administrator to add content.');
       }
 
+      const materials: { type: 'text' | 'image' | 'pdf', content: string }[] = [];
 
-      let courseMaterial = textContent;
-      let materialType: 'text' | 'image' | 'pdf' = 'text';
+      if (textContent.trim()) {
+        materials.push({ type: 'text', content: textContent });
+      }
 
-      if (file) {
-        if (file.type.startsWith('image/')) {
-          courseMaterial = await readFileAs(file, 'dataURL');
-          materialType = 'image';
-        } else if (file.type === 'application/pdf') {
-          courseMaterial = await readFileAs(file, 'dataURL');
-          materialType = 'pdf';
-        } else {
-          courseMaterial = await readFileAs(file, 'text');
-          materialType = 'text';
+      if (files && files.length > 0) {
+        for (const file of files) {
+          const dataUrl = await readFileAsDataURL(file);
+          let type: 'image' | 'pdf' | 'text' = 'text';
+          if (file.type.startsWith('image/')) type = 'image';
+          else if (file.type === 'application/pdf') type = 'pdf';
+          materials.push({ type, content: dataUrl });
         }
       }
 
       const result = await generateFlashcardsAndQuestions({
-        courseMaterial: courseMaterial,
-        materialType: materialType,
+        materials,
       });
 
       const batch = writeBatch(firestore);
@@ -187,7 +181,7 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
       // Reset form state
       setTopicName('');
       setTextContent('');
-      setFile(null);
+      setFiles(null);
 
     } catch (error: any) {
       console.error('Failed to generate content:', error);
@@ -230,7 +224,7 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
             </div>
              <div className="space-y-2">
               <Label htmlFor="materials">
-                Upload Materials (PDF, Image, etc.)
+                Upload Materials (PDF, Images, etc.)
               </Label>
               <div className="flex items-center justify-center w-full">
                 <label
@@ -239,10 +233,15 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
                 >
                   <div className="flex flex-col items-center justify-center pt-5 pb-6">
                     <UploadCloud className="w-8 h-8 mb-4 text-muted-foreground" />
-                    {file ? (
-                      <p className="font-semibold text-sm text-foreground">
-                        {file.name}
-                      </p>
+                    {files && files.length > 0 ? (
+                      <div className="flex flex-wrap justify-center gap-2">
+                        {Array.from(files).map(file => (
+                          <div key={file.name} className="flex items-center gap-2 bg-background border rounded-md px-2 py-1 text-xs">
+                            <FileIcon className="h-4 w-4" />
+                            <span>{file.name}</span>
+                          </div>
+                        ))}
+                      </div>
                     ) : (
                       <>
                         <p className="mb-2 text-sm text-muted-foreground">
@@ -250,7 +249,7 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
                           or drag and drop
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          PDF, PNG, JPG or TXT
+                          PDF, PNG, JPG, TXT, etc.
                         </p>
                       </>
                     )}
@@ -258,8 +257,9 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
                   <Input
                     id="dropzone-file-dialog"
                     type="file"
+                    multiple
                     className="hidden"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    onChange={(e) => setFiles(e.target.files ? Array.from(e.target.files) : null)}
                   />
                 </label>
               </div>
@@ -684,4 +684,3 @@ export default function AdminCourseReviewPage() {
     </div>
   );
 }
-    
