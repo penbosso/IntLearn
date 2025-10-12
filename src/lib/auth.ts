@@ -13,6 +13,7 @@ export type User = {
   avatarUrl: string;
   xp: number;
   streak: number;
+  lastActivityDate?: any; // Can be a Firestore Timestamp
 };
 
 // To test different roles, change the 'role' property here.
@@ -41,9 +42,9 @@ export async function getCurrentUser(firebaseUser?: FirebaseUser | null): Promis
         email: firebaseUser.email || '',
         avatarUrl: firebaseUser.photoURL || `https://i.pravatar.cc/150?u=${firebaseUser.uid}`,
         role: userData.role || 'student',
-        // These would come from the user's document in Firestore
         xp: userData.xp || 0,
         streak: userData.streak || 0,
+        lastActivityDate: userData.lastActivityDate,
       };
     } else {
       // Default user profile if not in DB
@@ -98,3 +99,5 @@ export const mockUsers: User[] = [
     streak: 0,
   },
 ];
+
+    

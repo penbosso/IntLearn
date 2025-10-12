@@ -23,7 +23,7 @@ import {
   initiateGoogleSignIn,
 } from '@/firebase/non-blocking-login';
 import { useAuth, useUser } from '@/firebase';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { useFirestore } from '@/firebase';
 import { Separator } from '@/components/ui/separator';
 
@@ -94,6 +94,7 @@ export default function AuthPage() {
                 role: 'student', // default role
                 xp: 0,
                 streak: 0,
+                lastActivityDate: null,
              });
           }
 
@@ -138,6 +139,7 @@ export default function AuthPage() {
             role: 'student',
             xp: 0,
             streak: 0,
+            lastActivityDate: null,
           });
         }
       },
@@ -169,6 +171,7 @@ export default function AuthPage() {
             role: 'student',
             xp: 0,
             streak: 0,
+            lastActivityDate: null,
           });
         }
         // Existing user, no need to do anything, they will be redirected.
@@ -356,3 +359,5 @@ export default function AuthPage() {
     </div>
   );
 }
+
+    

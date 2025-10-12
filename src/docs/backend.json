@@ -30,6 +30,11 @@
         "streak": {
           "type": "number",
           "description": "User's current daily study streak."
+        },
+        "lastActivityDate": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The last date the user completed a learning activity."
         }
       },
       "required": [
@@ -579,7 +584,7 @@
       },
       {
         "path": "/users/{userId}/userBadges/{userBadgeId}",
-        "definition": {
+        "definition":.
           "entityName": "UserBadge",
           "schema": {
             "$ref": "#/backend/entities/UserBadge"

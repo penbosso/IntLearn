@@ -10,9 +10,10 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { Check, X, Repeat, ArrowRight, Trophy } from 'lucide-react';
 import { useFirestore, useUser } from '@/firebase';
-import { addDoc, collection, serverTimestamp, doc, runTransaction, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, doc, runTransaction, updateDoc, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useParams, useSearchParams } from 'next/navigation';
+import { differenceInCalendarDays } from 'date-fns';
 
 
 type AnswerState = 'unanswered' | 'correct' | 'incorrect';
@@ -42,6 +43,13 @@ export default function QuizComponent({ questions, topicName }: { questions: Que
 
         // Use a transaction to ensure atomicity
         await runTransaction(firestore, async (transaction) => {
+            const userRef = doc(firestore, 'users', user.uid);
+            const userDoc = await transaction.get(userRef);
+
+            if (!userDoc.exists()) {
+                throw "User document does not exist!";
+            }
+
             // 1. Save the quiz attempt
             const quizAttemptRef = collection(firestore, `users/${user.uid}/quizAttempts`);
             transaction.set(doc(quizAttemptRef), {
@@ -54,12 +62,41 @@ export default function QuizComponent({ questions, topicName }: { questions: Que
                 totalQuestions: questions.length,
             });
 
-            // 2. Update user's XP
-            const userRef = doc(firestore, 'users', user.uid);
-            const userDoc = await transaction.get(userRef);
-            if (userDoc.exists()) {
-                const currentXp = userDoc.data().xp || 0;
-                transaction.update(userRef, { xp: currentXp + xpGained });
+            // 2. Update user's XP and Streak
+            const currentXp = userDoc.data().xp || 0;
+            const currentStreak = userDoc.data().streak || 0;
+            const lastActivityDate = userDoc.data().lastActivityDate as Timestamp | undefined;
+            
+            let newStreak = currentStreak;
+            const today = new Date();
+
+            if (lastActivityDate) {
+                const lastDate = lastActivityDate.toDate();
+                const daysDifference = differenceInCalendarDays(today, lastDate);
+
+                if (daysDifference === 1) {
+                    newStreak = currentStreak + 1; // It's consecutive
+                } else if (daysDifference > 1) {
+                    newStreak = 1; // Streak is broken, reset to 1
+                }
+                // if daysDifference is 0, do nothing to the streak
+            } else {
+                newStreak = 1; // First activity ever
+            }
+
+            transaction.update(userRef, { 
+                xp: currentXp + xpGained,
+                streak: newStreak,
+                lastActivityDate: today,
+            });
+
+            if (newStreak > currentStreak && newStreak > 0) {
+                 setTimeout(() => {
+                    toast({
+                        title: "Daily Streak Continued!",
+                        description: `You're on a ${newStreak}-day streak!`,
+                    });
+                }, 1500)
             }
         });
 
@@ -206,3 +243,5 @@ export default function QuizComponent({ questions, topicName }: { questions: Que
     </Card>
   );
 }
+
+    
