@@ -14,6 +14,7 @@ import { addDoc, collection, serverTimestamp, doc, runTransaction, updateDoc, Ti
 import { useToast } from '@/hooks/use-toast';
 import { useParams, useSearchParams } from 'next/navigation';
 import { differenceInCalendarDays } from 'date-fns';
+import { awardBadges } from '@/lib/badges/badge-engine';
 
 
 type AnswerState = 'unanswered' | 'correct' | 'incorrect';
@@ -54,7 +55,7 @@ export default function QuizComponent({ questions, topicName }: { questions: Que
 
             // 1. Save the quiz attempt
             const quizAttemptRef = collection(firestore, `users/${user.uid}/quizAttempts`);
-            transaction.set(doc(quizAttemptRef), {
+            const attemptData = {
                 userId: user.uid,
                 courseId: courseId, // Save courseId
                 quizId: topicId, // Using topicId as quizId for now
@@ -63,7 +64,8 @@ export default function QuizComponent({ questions, topicName }: { questions: Que
                 attemptedDate: serverTimestamp(),
                 correctAnswers: finalScore,
                 totalQuestions: questions.length,
-            });
+            };
+            transaction.set(doc(quizAttemptRef), attemptData);
 
             // 2. Update user's XP and Streak
             const currentXp = userDoc.data().xp || 0;
@@ -92,6 +94,25 @@ export default function QuizComponent({ questions, topicName }: { questions: Que
                 streak: newStreak,
                 lastActivityDate: today,
             });
+
+            // 3. Award Badges (pass transaction to engine)
+            const newBadges = await awardBadges(transaction, {
+              userId: user.uid,
+              topicId,
+              score: percentage,
+            });
+
+            // Show toasts for new badges after a delay
+            setTimeout(() => {
+              newBadges.forEach((badge, index) => {
+                setTimeout(() => {
+                  toast({
+                    title: "Badge Unlocked!",
+                    description: `You've earned the "${badge.name}" badge!`,
+                  });
+                }, (index + 1) * 600);
+              });
+            }, 1000);
 
             if (newStreak > currentStreak && newStreak > 0) {
                  setTimeout(() => {

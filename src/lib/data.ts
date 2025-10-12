@@ -55,6 +55,14 @@ export type StudentProgress = {
   accuracy: number;
 };
 
+export type UserBadge = {
+    id: string;
+    userId: string;
+    badgeId: string;
+    earnedDate: any; // Firestore Timestamp
+}
+
+
 // This function can be used for features that don't need live data, like the leaderboard.
 export const getLeaderboard = async () => {
     const { mockUsers } = await import('./auth');
