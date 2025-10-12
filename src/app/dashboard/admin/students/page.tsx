@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -20,9 +19,10 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy } from 'firebase/firestore';
+import { collection, query, where } from 'firebase/firestore';
 import type { User } from '@/lib/auth';
 import { Loader2 } from 'lucide-react';
+import { useMemo } from 'react';
 
 export default function AdminStudentsPage() {
   const firestore = useFirestore();
@@ -32,14 +32,18 @@ export default function AdminStudentsPage() {
       firestore
         ? query(
             collection(firestore, 'users'),
-            where('role', '==', 'student'),
-            orderBy('xp', 'desc')
+            where('role', '==', 'student')
           )
         : null,
     [firestore]
   );
 
   const { data: students, isLoading } = useCollection<User>(studentsQuery);
+  
+  const sortedStudents = useMemo(() => {
+    if (!students) return [];
+    return [...students].sort((a, b) => (b.xp || 0) - (a.xp || 0));
+  }, [students]);
 
   return (
     <div className="space-y-6">
@@ -69,7 +73,7 @@ export default function AdminStudentsPage() {
                   </TableCell>
                 </TableRow>
               )}
-              {students?.map((student) => (
+              {sortedStudents.map((student) => (
                 <TableRow key={student.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -97,7 +101,7 @@ export default function AdminStudentsPage() {
                   </TableCell>
                 </TableRow>
               ))}
-              {!isLoading && students?.length === 0 && (
+              {!isLoading && sortedStudents.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center">
                     No students have signed up yet.
