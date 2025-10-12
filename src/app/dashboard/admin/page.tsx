@@ -121,6 +121,23 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
+       <Card>
+        <CardHeader>
+          <CardTitle>Manage Students</CardTitle>
+          <CardDescription>
+            View student progress and analytics.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+            <Button asChild>
+                <Link href="/dashboard/admin/students">
+                    <Users className="mr-2 h-4 w-4" />
+                    View All Students
+                </Link>
+            </Button>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Managed Courses</CardTitle>

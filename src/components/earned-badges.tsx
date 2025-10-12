@@ -21,13 +21,15 @@ import type { UserBadge } from '@/lib/data';
 import { getBadgeDefinitions } from '@/lib/badges/badge-definitions';
 
 
-export function EarnedBadges() {
-    const { user } = useUser();
+export function EarnedBadges({ userId }: { userId?: string }) {
+    const { user: authUser } = useUser();
     const firestore = useFirestore();
 
+    const targetUserId = userId || authUser?.uid;
+
     const userBadgesQuery = useMemoFirebase(
-      () => user ? query(collection(firestore, `users/${user.uid}/userBadges`)) : null,
-      [firestore, user]
+      () => targetUserId ? query(collection(firestore, `users/${targetUserId}/userBadges`)) : null,
+      [firestore, targetUserId]
     );
 
     const { data: earnedBadges, isLoading } = useCollection<UserBadge>(userBadgesQuery);
@@ -98,7 +100,7 @@ export function EarnedBadges() {
                         </div>
                     </TooltipProvider>
                 ) : (
-                    <p className="text-muted-foreground text-center p-4">You haven't earned any badges yet. Keep learning!</p>
+                    <p className="text-muted-foreground text-center p-4">No badges earned yet. Keep learning!</p>
                 )}
             </CardContent>
         </Card>
