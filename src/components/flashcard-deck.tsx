@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -14,7 +14,8 @@ import { useToast } from '@/hooks/use-toast';
 
 const MASTERY_STREAK_THRESHOLD = 3;
 
-export default function FlashcardDeck({ flashcards }: { flashcards: Flashcard[] }) {
+export default function FlashcardDeck({ flashcards: initialFlashcards }: { flashcards: Flashcard[] }) {
+  const [flashcards, setFlashcards] = useState(initialFlashcards);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [completed, setCompleted] = useState(false);
@@ -27,6 +28,11 @@ export default function FlashcardDeck({ flashcards }: { flashcards: Flashcard[] 
   const searchParams = useSearchParams();
   const courseId = params.courseId as string;
   const topicId = searchParams.get('topic');
+
+  // Effect to handle changes in the initial flashcards prop (e.g., filtering)
+  useEffect(() => {
+    handleRestart(initialFlashcards);
+  }, [initialFlashcards]);
 
   const currentFlashcard = useMemo(() => flashcards[currentIndex], [flashcards, currentIndex]);
   const progress = useMemo(() => (currentIndex / flashcards.length) * 100, [currentIndex, flashcards.length]);
@@ -74,6 +80,8 @@ export default function FlashcardDeck({ flashcards }: { flashcards: Flashcard[] 
   };
 
   const handleNext = (known: boolean) => {
+    if (!currentFlashcard) return;
+    
     if (known && !knownCards.includes(currentFlashcard.id)) {
       setKnownCards([...knownCards, currentFlashcard.id]);
     }
@@ -88,7 +96,8 @@ export default function FlashcardDeck({ flashcards }: { flashcards: Flashcard[] 
     }
   };
 
-  const handleRestart = () => {
+  const handleRestart = (cardSet = initialFlashcards) => {
+    setFlashcards([...cardSet].sort(() => Math.random() - 0.5));
     setCurrentIndex(0);
     setIsFlipped(false);
     setCompleted(false);
@@ -102,10 +111,18 @@ export default function FlashcardDeck({ flashcards }: { flashcards: Flashcard[] 
             <p className="text-muted-foreground mb-6">You reviewed all the flashcards.</p>
             <div className="text-4xl font-bold mb-2">{knownCards.length} / {flashcards.length}</div>
             <p className="text-muted-foreground mb-6">Marked as known</p>
-            <Button onClick={handleRestart}>
+            <Button onClick={() => handleRestart()}>
                 <Repeat className="mr-2 h-4 w-4" />
                 Study Again
             </Button>
+        </Card>
+    );
+  }
+
+  if (!currentFlashcard) {
+    return (
+        <Card className="w-full max-w-lg text-center p-8">
+            <h2 className="text-2xl font-bold mb-4">Loading...</h2>
         </Card>
     );
   }
@@ -164,5 +181,3 @@ export default function FlashcardDeck({ flashcards }: { flashcards: Flashcard[] 
     </div>
   );
 }
-
-    

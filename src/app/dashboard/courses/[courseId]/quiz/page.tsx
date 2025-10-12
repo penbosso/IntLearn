@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { useDoc, useCollection, useMemoFirebase, useFirestore } from '@/firebase';
 import { doc, collection, query, where } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
 
 
 export default function QuizPage() {
@@ -21,6 +22,15 @@ export default function QuizPage() {
 
   const { data: topic, isLoading: isTopicLoading } = useDoc(topicRef);
   const { data: questions, isLoading: areQuestionsLoading } = useCollection(questionsQuery);
+
+  const [shuffledQuestions, setShuffledQuestions] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (questions) {
+      setShuffledQuestions([...questions].sort(() => Math.random() - 0.5));
+    }
+  }, [questions]);
+
 
   if (!topicId) {
       notFound();
@@ -56,8 +66,8 @@ export default function QuizPage() {
       </div>
 
       <div className="flex-grow flex items-center justify-center">
-        {questions && questions.length > 0 ? (
-          <QuizComponent questions={questions} topicName={topic.name} />
+        {shuffledQuestions && shuffledQuestions.length > 0 ? (
+          <QuizComponent questions={shuffledQuestions} topicName={topic.name} />
         ) : (
           <div className="text-center">
             <h2 className="text-xl font-semibold">No Quiz Available</h2>

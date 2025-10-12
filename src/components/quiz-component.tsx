@@ -37,6 +37,11 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
   const searchParams = useSearchParams();
   const topicId = searchParams.get('topic');
 
+  // Reset state when initial questions change
+  useEffect(() => {
+    handleRestart();
+  }, [initialQuestions]);
+
   const currentQuestion = questions[currentIndex];
   const progress = ((currentIndex + 1) / questions.length) * 100;
   
@@ -178,7 +183,7 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
   }
 
   const handleRestart = () => {
-    setQuestions(initialQuestions);
+    setQuestions([...initialQuestions].sort(() => Math.random() - 0.5));
     setCurrentIndex(0);
     setSelectedAnswer(null);
     setAnswerState('unanswered');
@@ -212,6 +217,14 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
         </Button>
       </Card>
     );
+  }
+
+  if (!currentQuestion) {
+      return (
+          <Card className="w-full max-w-2xl text-center p-8">
+              <h2 className="text-2xl font-bold">Loading...</h2>
+          </Card>
+      )
   }
 
   const options = currentQuestion.options?.length > 0 ? currentQuestion.options : (currentQuestion.type === 'True/False' ? ['True', 'False'] : []);

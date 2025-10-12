@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import FlashcardDeck from '@/components/flashcard-deck';
 import { notFound, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -35,12 +35,22 @@ export default function FlashcardsPage() {
       notFound();
   }
   
+  // Use state to hold the shuffled flashcards so they don't re-shuffle on re-renders
+  const [shuffledFlashcards, setShuffledFlashcards] = useState<Flashcard[]>([]);
+
+  useEffect(() => {
+    if (flashcards) {
+      setShuffledFlashcards([...flashcards].sort(() => Math.random() - 0.5));
+    }
+  }, [flashcards]);
+
+
   const filteredFlashcards = useMemo(() => {
-    if (!flashcards) return [];
-    if (!hideMastered || !masteredCards) return flashcards;
+    if (!shuffledFlashcards) return [];
+    if (!hideMastered || !masteredCards) return shuffledFlashcards;
     const masteredIds = new Set(masteredCards.map(c => c.flashcardId));
-    return flashcards.filter(fc => !masteredIds.has(fc.id));
-  }, [flashcards, masteredCards, hideMastered]);
+    return shuffledFlashcards.filter(fc => !masteredIds.has(fc.id));
+  }, [shuffledFlashcards, masteredCards, hideMastered]);
 
 
   const isLoading = isTopicLoading || areFlashcardsLoading || areMasteryCardsLoading;
