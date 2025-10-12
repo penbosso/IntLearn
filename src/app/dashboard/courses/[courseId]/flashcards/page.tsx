@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { useDoc, useCollection, useMemoFirebase, useFirestore } from '@/firebase';
-import { doc, collection } from 'firebase/firestore';
+import { doc, collection, query, where } from 'firebase/firestore';
 
 export default function FlashcardsPage() {
   const params = useParams();
@@ -16,7 +16,7 @@ export default function FlashcardsPage() {
   const firestore = useFirestore();
 
   const topicRef = useMemoFirebase(() => firestore && topicId ? doc(firestore, `courses/${courseId}/topics`, topicId) : null, [firestore, courseId, topicId]);
-  const flashcardsRef = useMemoFirebase(() => firestore && topicId ? collection(firestore, `courses/${courseId}/topics/${topicId}/flashcards`) : null, [firestore, courseId, topicId]);
+  const flashcardsRef = useMemoFirebase(() => firestore && topicId ? query(collection(firestore, `courses/${courseId}/topics/${topicId}/flashcards`), where('status', '==', 'approved')) : null, [firestore, courseId, topicId]);
 
   const { data: topic, isLoading: isTopicLoading } = useDoc(topicRef);
   const { data: flashcards, isLoading: areFlashcardsLoading } = useCollection(flashcardsRef);
@@ -59,10 +59,12 @@ export default function FlashcardsPage() {
         ) : (
           <div className="text-center">
             <h2 className="text-xl font-semibold">No Flashcards Yet</h2>
-            <p className="text-muted-foreground">There are no flashcards available for this topic.</p>
+            <p className="text-muted-foreground">There are no approved flashcards available for this topic.</p>
           </div>
         )}
       </div>
     </div>
   );
 }
+
+    

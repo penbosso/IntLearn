@@ -129,6 +129,13 @@ export default function PerformancePage() {
     );
     const { data: quizAttempts, isLoading: areAttemptsLoading } = useCollection<QuizAttempt>(attemptsQuery);
     
+    // Fetch mastered flashcards
+    const masteredCardsQuery = useMemoFirebase(
+      () => user ? query(collection(firestore, `users/${user.uid}/flashcardMastery`), where('status', '==', 'mastered')) : null,
+      [firestore, user]
+    );
+    const { data: masteredCards, isLoading: areMasteredCardsLoading } = useCollection(masteredCardsQuery);
+
     // Calculate aggregate stats
     const { overallAccuracy, quizzesTaken } = useMemo(() => {
         if (!quizAttempts || quizAttempts.length === 0) {
@@ -144,7 +151,7 @@ export default function PerformancePage() {
         };
     }, [quizAttempts]);
 
-    const isLoading = isLeaderboardLoading || areAttemptsLoading;
+    const isLoading = isLeaderboardLoading || areAttemptsLoading || areMasteredCardsLoading;
 
   return (
     <div className="space-y-6">
@@ -171,8 +178,12 @@ export default function PerformancePage() {
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-             <div className="text-2xl font-bold">...</div>
-            <p className="text-xs text-muted-foreground">Feature coming soon</p>
+             {areMasteredCardsLoading ? <Loader2 className="h-6 w-6 animate-spin" /> :
+              <>
+                <div className="text-2xl font-bold">{masteredCards?.length || 0}</div>
+                <p className="text-xs text-muted-foreground">Total flashcards marked as known</p>
+              </>
+            }
           </CardContent>
         </Card>
         <Card>
@@ -256,3 +267,5 @@ export default function PerformancePage() {
     </div>
   );
 }
+
+    

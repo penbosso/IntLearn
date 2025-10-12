@@ -7,20 +7,78 @@ import { Progress } from '@/components/ui/progress';
 import { Check, X, Repeat } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Flashcard } from '@/lib/data';
+import { useFirestore, useUser } from '@/firebase';
+import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { useParams, useSearchParams } from 'next/navigation';
+import { useToast } from '@/hooks/use-toast';
+
+const MASTERY_STREAK_THRESHOLD = 3;
 
 export default function FlashcardDeck({ flashcards }: { flashcards: Flashcard[] }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [knownCards, setKnownCards] = useState<string[]>([]);
+  
+  const firestore = useFirestore();
+  const { user } = useUser();
+  const { toast } = useToast();
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const courseId = params.courseId as string;
+  const topicId = searchParams.get('topic');
 
   const currentFlashcard = useMemo(() => flashcards[currentIndex], [flashcards, currentIndex]);
   const progress = useMemo(() => (currentIndex / flashcards.length) * 100, [currentIndex, flashcards.length]);
 
+  const updateMastery = async (flashcardId: string, known: boolean) => {
+    if (!user || !topicId || !courseId) return;
+
+    const masteryRef = doc(firestore, `users/${user.uid}/flashcardMastery`, flashcardId);
+
+    try {
+      await runTransaction(firestore, async (transaction) => {
+        const masteryDoc = await transaction.get(masteryRef);
+        let newStreak = 0;
+        let newStatus: 'learning' | 'mastered' = 'learning';
+
+        if (known) {
+          newStreak = (masteryDoc.exists() ? masteryDoc.data().correctStreak : 0) + 1;
+          if (newStreak >= MASTERY_STREAK_THRESHOLD) {
+            newStatus = 'mastered';
+          }
+        } // If not known, streak resets to 0, status remains 'learning'
+
+        const data = {
+          userId: user.uid,
+          flashcardId: flashcardId,
+          topicId: topicId,
+          courseId: courseId,
+          correctStreak: newStreak,
+          status: newStatus,
+          lastReviewed: serverTimestamp(),
+        };
+
+        transaction.set(masteryRef, data, { merge: true });
+        
+        if (newStatus === 'mastered' && (!masteryDoc.exists() || masteryDoc.data().status !== 'mastered')) {
+             setTimeout(() => toast({
+                title: "Flashcard Mastered!",
+                description: "You've marked this card as known 3 times in a row.",
+            }), 500);
+        }
+      });
+    } catch (e) {
+      console.error("Could not update flashcard mastery:", e);
+    }
+  };
+
   const handleNext = (known: boolean) => {
     if (known && !knownCards.includes(currentFlashcard.id)) {
-        setKnownCards([...knownCards, currentFlashcard.id]);
+      setKnownCards([...knownCards, currentFlashcard.id]);
     }
+
+    updateMastery(currentFlashcard.id, known);
 
     if (currentIndex < flashcards.length - 1) {
       setCurrentIndex(currentIndex + 1);
@@ -106,3 +164,5 @@ export default function FlashcardDeck({ flashcards }: { flashcards: Flashcard[] 
     </div>
   );
 }
+
+    

@@ -139,6 +139,49 @@
         "back"
       ]
     },
+    "FlashcardMastery": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "FlashcardMastery",
+      "type": "object",
+      "description": "Tracks a student's mastery of a single flashcard.",
+      "properties": {
+        "userId": {
+          "type": "string"
+        },
+        "flashcardId": {
+          "type": "string"
+        },
+        "topicId": {
+          "type": "string"
+        },
+        "courseId": {
+          "type": "string"
+        },
+        "correctStreak": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "learning",
+            "mastered"
+          ]
+        },
+        "lastReviewed": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "userId",
+        "flashcardId",
+        "topicId",
+        "courseId",
+        "correctStreak",
+        "status",
+        "lastReviewed"
+      ]
+    },
     "Question": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Question",
@@ -583,8 +626,28 @@
         }
       },
       {
+        "path": "/users/{userId}/flashcardMastery/{flashcardId}",
+        "definition": {
+          "entityName": "FlashcardMastery",
+          "schema": {
+            "$ref": "#/backend/entities/FlashcardMastery"
+          },
+          "description": "Stores a user's mastery progress for a specific flashcard. Path-based ownership ensures only the user can access their own progress.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "flashcardId",
+              "description": "The unique identifier for the flashcard."
+            }
+          ]
+        }
+      },
+      {
         "path": "/users/{userId}/userBadges/{userBadgeId}",
-        "definition":.
+        "definition": {
           "entityName": "UserBadge",
           "schema": {
             "$ref": "#/backend/entities/UserBadge"
