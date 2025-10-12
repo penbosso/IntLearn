@@ -28,6 +28,8 @@ export default function QuizComponent({ questions, topicName }: { questions: Que
   const firestore = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
+  const params = useParams();
+  const courseId = params.courseId as string;
   const searchParams = useSearchParams();
   const topicId = searchParams.get('topic');
 
@@ -35,7 +37,7 @@ export default function QuizComponent({ questions, topicName }: { questions: Que
   const progress = ((currentIndex + 1) / questions.length) * 100;
   
   const handleSaveResults = async (finalScore: number) => {
-    if (!user || !topicId) return;
+    if (!user || !topicId || !courseId) return;
 
     try {
         const percentage = Math.round((finalScore / questions.length) * 100);
@@ -54,6 +56,7 @@ export default function QuizComponent({ questions, topicName }: { questions: Que
             const quizAttemptRef = collection(firestore, `users/${user.uid}/quizAttempts`);
             transaction.set(doc(quizAttemptRef), {
                 userId: user.uid,
+                courseId: courseId, // Save courseId
                 quizId: topicId, // Using topicId as quizId for now
                 topicName: topicName,
                 score: percentage,
@@ -133,7 +136,6 @@ export default function QuizComponent({ questions, topicName }: { questions: Que
     if (isLastQuestion) {
         setShowResults(true);
         // We use the final score here directly, checking the last answer
-        const finalScore = (answerState === 'correct' || (answerState === 'unanswered' && selectedAnswer === currentQuestion.answer)) ? score : score - 1;
         const finalCorrectScore = selectedAnswer === currentQuestion.answer ? score + 1 : score;
         handleSaveResults(finalCorrectScore);
     } else {
@@ -196,6 +198,7 @@ export default function QuizComponent({ questions, topicName }: { questions: Que
         <RadioGroup
           value={selectedAnswer || undefined}
           onValueChange={(value) => {
+            if (answerState !== 'unanswered') return;
             setSelectedAnswer(value)
             // Immediately check answer on selection
             const isCorrect = value === currentQuestion.answer;
@@ -243,5 +246,3 @@ export default function QuizComponent({ questions, topicName }: { questions: Que
     </Card>
   );
 }
-
-    

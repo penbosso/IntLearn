@@ -10,16 +10,16 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { BookOpenCheck, Flame, Zap } from 'lucide-react';
+import { BookOpenCheck, Flame, Zap, ArrowRight, Book, Edit, Loader2 } from 'lucide-react';
 import { getCurrentUser } from '@/lib/auth';
 import Image from 'next/image';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
 import { useEffect, useState } from 'react';
 import type { User } from '@/lib/auth';
-import { collection, addDoc, serverTimestamp, query, where } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where, orderBy, limit, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useCourseProgress } from '@/hooks/use-course-progress';
-
+import type { QuizAttempt, Course as CourseType, Topic } from '@/lib/data';
 
 type Course = {
   id: string;
@@ -28,6 +28,78 @@ type Course = {
   imageUrl: string;
   imageHint: string;
   status: 'draft' | 'published';
+}
+
+function ContinueLearningCard() {
+    const { user } = useUser();
+    const firestore = useFirestore();
+
+    const lastAttemptQuery = useMemoFirebase(
+        () => user ? query(
+            collection(firestore, `users/${user.uid}/quizAttempts`),
+            orderBy('attemptedDate', 'desc'),
+            limit(1)
+        ) : null,
+        [user, firestore]
+    );
+
+    const { data: lastAttemptData, isLoading: isAttemptLoading } = useCollection<QuizAttempt>(lastAttemptQuery);
+    const lastAttempt = lastAttemptData?.[0];
+
+    const { courseId, topicId } = useMemo(() => {
+        if (!lastAttempt?.courseId || !lastAttempt?.quizId) return { courseId: null, topicId: null };
+        return { courseId: lastAttempt.courseId, topicId: lastAttempt.quizId };
+    }, [lastAttempt]);
+
+    const courseRef = useMemoFirebase(() => (firestore && courseId) ? doc(firestore, 'courses', courseId) : null, [firestore, courseId]);
+    const topicRef = useMemoFirebase(() => (firestore && courseId && topicId) ? doc(firestore, `courses/${courseId}/topics`, topicId) : null, [firestore, courseId, topicId]);
+
+    const { data: course, isLoading: isCourseLoading } = useDoc<CourseType>(courseRef);
+    const { data: topic, isLoading: isTopicLoading } = useDoc<Topic>(topicRef);
+
+    const isLoading = isAttemptLoading || isCourseLoading || isTopicLoading;
+
+    if (isLoading) {
+        return (
+             <Card className="bg-primary/10 border-primary/50">
+                <CardHeader>
+                    <CardTitle>Continue Learning</CardTitle>
+                </CardHeader>
+                <CardContent className="flex items-center justify-center h-24">
+                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </CardContent>
+            </Card>
+        );
+    }
+    
+    if (!lastAttempt || !course || !topic) {
+        return null; // Don't show the card if there's no history or data
+    }
+    
+    return (
+        <Card className="bg-primary/10 border-primary/50">
+            <CardHeader>
+                <CardTitle>Continue Learning</CardTitle>
+                <CardDescription>You were last studying: <strong>{topic.name}</strong> from <strong>{course.name}</strong></CardDescription>
+            </CardHeader>
+            <CardContent>
+                 <div className="flex gap-4">
+                    <Button asChild>
+                        <Link href={`/dashboard/courses/${courseId}/flashcards?topic=${topicId}`}>
+                            <Book className="mr-2 h-4 w-4" />
+                            Study Flashcards
+                        </Link>
+                    </Button>
+                     <Button asChild variant="outline">
+                        <Link href={`/dashboard/courses/${courseId}/quiz?topic=${topicId}`}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Retake Quiz
+                        </Link>
+                    </Button>
+               </div>
+            </CardContent>
+        </Card>
+    )
 }
 
 export default function DashboardPage() {
@@ -73,6 +145,8 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <h1 className="text-3xl font-bold font-headline">Welcome back, {user.name.split(' ')[0]}!</h1>
       
+      <ContinueLearningCard />
+
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

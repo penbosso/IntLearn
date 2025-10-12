@@ -36,6 +36,7 @@ export type Question = {
 export type QuizAttempt = {
   id: string;
   userId: string;
+  courseId: string;
   quizId: string; // This corresponds to a topicId
   topicName: string;
   score: number;
@@ -60,5 +61,3 @@ export const getLeaderboard = async () => {
     const sortedUsers = mockUsers.filter(u => u.role === 'student').sort((a, b) => b.xp - a.xp);
     return new Promise(resolve => setTimeout(() => resolve(sortedUsers), 50));
 };
-
-    
