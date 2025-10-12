@@ -398,6 +398,19 @@ export default function AdminCourseReviewPage() {
   // Fetch data using hooks
   const { data: course, isLoading: isCourseLoading } = useDoc(courseRef);
   const { data: topics, isLoading: areTopicsLoading } = useCollection(topicsQuery);
+  
+  const [hasTimedOut, setHasTimedOut] = useState(false);
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if(isCourseLoading) {
+        setHasTimedOut(true);
+      }
+    }, 2000); // 2 second timeout
+
+    return () => clearTimeout(timer);
+  }, [isCourseLoading]);
+
 
   const [topicId, setTopicId] = useState<string | null>(null);
 
@@ -468,7 +481,7 @@ export default function AdminCourseReviewPage() {
     }
   };
 
-  if (!isLoading && !course) {
+  if (!isCourseLoading && !course && hasTimedOut) {
     notFound();
   }
 
@@ -484,8 +497,11 @@ export default function AdminCourseReviewPage() {
     }
   };
 
-  if (isLoading) {
-    return <div>Loading course content for review...</div>
+  if (isLoading && !hasTimedOut) {
+    return <div className="flex h-full w-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-4">Loading course content for review...</span>
+    </div>
   }
 
   return (
