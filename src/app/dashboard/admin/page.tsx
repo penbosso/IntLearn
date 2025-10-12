@@ -46,9 +46,12 @@ export default function AdminDashboardPage() {
   
   const { data: courses, isLoading: areCoursesLoading } = useCollection<Course>(coursesQuery);
 
-  // More focused query: get all students enrolled in the admin's courses.
-  // This is still potentially large, so we will remove it for now and rely on the dedicated students page.
-  // const { data: students, isLoading: areStudentsLoading } = useCollection(studentsQuery);
+  const studentsQuery = useMemoFirebase(
+    () => firestore ? query(collection(firestore, 'users'), where('role', '==', 'student')) : null,
+    [firestore]
+  );
+  const { data: students, isLoading: areStudentsLoading } = useCollection<User>(studentsQuery);
+
 
   const allAttemptsQuery = useMemoFirebase(
     () => firestore ? query(collectionGroup(firestore, 'quizAttempts')) : null,
@@ -68,7 +71,7 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const isLoading = areCoursesLoading || areAttemptsLoading || !user;
+  const isLoading = areCoursesLoading || areAttemptsLoading || areStudentsLoading || !user;
 
   if (isLoading) {
     return (
@@ -101,10 +104,10 @@ export default function AdminDashboardPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {isLoading ? <Loader2 className="h-6 w-6 animate-spin"/> :
+            {areStudentsLoading ? <Loader2 className="h-6 w-6 animate-spin"/> :
                 <>
-                    <div className="text-2xl font-bold">...</div>
-                    <p className="text-xs text-muted-foreground">View students in dedicated tab</p>
+                    <div className="text-2xl font-bold">{students?.length || 0}</div>
+                    <p className="text-xs text-muted-foreground">students have signed up</p>
                 </>
             }
           </CardContent>
