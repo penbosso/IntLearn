@@ -111,15 +111,19 @@ export function CreatableCombobox({
   const [inputValue, setInputValue] = React.useState("")
   const selectedOption = options.find((option) => option.value === value)
 
-  const handleSelect = (newValue: string, newLabel: string) => {
+  const handleCreate = (newLabel: string) => {
+    const trimmedLabel = newLabel.trim();
+    if (!trimmedLabel) return;
+    
     const existingOption = options.find(
-      (opt) => opt.label.toLowerCase() === newLabel.toLowerCase()
+      (opt) => opt.label.toLowerCase() === trimmedLabel.toLowerCase()
     )
     if (existingOption) {
       onChange(existingOption.value)
     } else {
-      onCreate(newLabel)
+      onCreate(trimmedLabel)
     }
+    setInputValue("")
     setOpen(false)
   }
 
@@ -147,13 +151,21 @@ export function CreatableCombobox({
             placeholder={placeholder}
             value={inputValue}
             onValueChange={setInputValue}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && inputValue) {
+                handleCreate(inputValue);
+              }
+            }}
           />
           <CommandList>
-            <CommandEmpty
-              onSelect={() => handleSelect(inputValue, inputValue)}
-              className="py-1"
-            >
-                <div className="p-2 cursor-pointer">
+            <CommandEmpty>
+                <div 
+                    className="p-2 cursor-pointer"
+                    onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleCreate(inputValue);
+                    }}
+                >
                     Create "{inputValue}"
                 </div>
             </CommandEmpty>
@@ -168,6 +180,7 @@ export function CreatableCombobox({
                         (opt) => opt.label.toLowerCase() === currentValue
                       )?.value || ""
                     )
+                    setInputValue("")
                     setOpen(false)
                   }}
                 >
