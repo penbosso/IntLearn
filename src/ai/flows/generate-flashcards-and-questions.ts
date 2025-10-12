@@ -42,9 +42,17 @@ export async function generateFlashcardsAndQuestions(input: GenerateFlashcardsAn
   return generateFlashcardsAndQuestionsFlow(input);
 }
 
+// Add an isText boolean to the prompt input schema for easier templating
+const PromptInputSchema = GenerateFlashcardsAndQuestionsInputSchema.extend({
+    materials: z.array(MaterialSchema.extend({
+        isText: z.boolean(),
+    })),
+});
+
+
 const generateFlashcardsAndQuestionsPrompt = ai.definePrompt({
   name: 'generateFlashcardsAndQuestionsPrompt',
-  input: {schema: GenerateFlashcardsAndQuestionsInputSchema},
+  input: {schema: PromptInputSchema},
   output: {schema: GenerateFlashcardsAndQuestionsOutputSchema},
   prompt: `You are an AI assistant designed to generate flashcards and questions from course materials.
 
@@ -54,7 +62,7 @@ const generateFlashcardsAndQuestionsPrompt = ai.definePrompt({
   
   {{#each materials}}
   Material (Type: {{{this.type}}}):
-  {{#if (eq this.type 'text')}}
+  {{#if this.isText}}
     {{{this.content}}}
   {{else}}
     {{media url=this.content}}
@@ -78,7 +86,15 @@ const generateFlashcardsAndQuestionsFlow = ai.defineFlow(
     outputSchema: GenerateFlashcardsAndQuestionsOutputSchema,
   },
   async input => {
-    const {output} = await generateFlashcardsAndQuestionsPrompt(input);
+    // Pre-process materials to add the 'isText' flag for easier use in the prompt template
+    const processedMaterials = input.materials.map(material => ({
+      ...material,
+      isText: material.type === 'text',
+    }));
+
+    const {output} = await generateFlashcardsAndQuestionsPrompt({
+        materials: processedMaterials
+    });
     return output!;
   }
 );
