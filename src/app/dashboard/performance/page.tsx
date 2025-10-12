@@ -36,7 +36,6 @@ export default function PerformancePage() {
         firestore
           ? query(
               collection(firestore, 'users'),
-              where('role', '==', 'student'),
               orderBy('xp', 'desc'),
               where('xp', '>', 0) // Only show users with XP
             )
