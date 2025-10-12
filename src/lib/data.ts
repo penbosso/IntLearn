@@ -24,6 +24,17 @@ export type Flashcard = {
   back: string;
 };
 
+export type FlashcardMastery = {
+    id: string;
+    userId: string;
+    flashcardId: string;
+    topicId: string;
+    courseId: string;
+    correctStreak: number;
+    status: 'learning' | 'mastered';
+    lastReviewed: any; // Firestore Timestamp
+};
+
 export type Question = {
   id: string;
   topicId: string;
