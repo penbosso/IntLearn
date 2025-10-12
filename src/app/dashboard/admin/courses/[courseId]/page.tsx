@@ -52,7 +52,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Check, CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2, XCircle, File as FileIcon, ChevronDown } from 'lucide-react';
+import { Check, CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2, XCircle, File as FileIcon, ChevronDown, Settings } from 'lucide-react';
 import { useCollection, useDoc, useMemoFirebase, useAuth, useFirestore, useUser } from '@/firebase';
 import { doc, collection, query, writeBatch, serverTimestamp, deleteDoc, updateDoc, getDoc, setDoc, addDoc } from 'firebase/firestore';
 import {
@@ -77,6 +77,106 @@ const readFileAsDataURL = (file: File): Promise<string> => {
     reader.readAsDataURL(file);
   });
 };
+
+function EditCourseDialog({ course, courseId }: { course: any; courseId: string }) {
+  const { toast } = useToast();
+  const firestore = useFirestore();
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [courseName, setCourseName] = useState(course.name);
+  const [courseDescription, setCourseDescription] = useState(course.description);
+
+  useEffect(() => {
+    setCourseName(course.name);
+    setCourseDescription(course.description);
+  }, [course]);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!courseName.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Course Name Required',
+        description: 'Please provide a name for the course.',
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const courseRef = doc(firestore, `courses`, courseId);
+      await updateDoc(courseRef, {
+        name: courseName,
+        description: courseDescription,
+      });
+
+      setLoading(false);
+      toast({
+        title: 'Course Updated',
+        description: 'The course details have been successfully updated.',
+      });
+      setOpen(false);
+    } catch (error: any) {
+      console.error('Failed to update course:', error);
+      setLoading(false);
+      toast({
+        variant: 'destructive',
+        title: 'Update Failed',
+        description: error.message || 'Could not update the course.',
+      });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <Settings className="mr-2 h-4 w-4" />
+          Edit Course
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[425px]">
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>Edit Course Info</DialogTitle>
+            <DialogDescription>
+              Update the name and description for your course.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-course-name">Course Name</Label>
+              <Input
+                id="edit-course-name"
+                value={courseName}
+                onChange={(e) => setCourseName(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-course-description">Course Description</Label>
+              <Textarea
+                id="edit-course-description"
+                value={courseDescription}
+                onChange={(e) => setCourseDescription(e.target.value)}
+                className="min-h-[100px]"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="ghost">Cancel</Button>
+            </DialogClose>
+            <Button type="submit" disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {loading ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 
 function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onContentAdded: () => void }) {
@@ -749,11 +849,12 @@ export default function AdminCourseReviewPage() {
         <div>
           <h1 className="text-3xl font-bold font-headline">Manage: {course?.name}</h1>
           <p className="text-muted-foreground">
-            Review and approve the AI-generated content for this course.
+            {course?.description || 'Review and approve the AI-generated content for this course.'}
           </p>
         </div>
         <div className="flex gap-2">
             <AddContentDialog courseId={courseId} onContentAdded={handleContentRefresh} />
+            {course && <EditCourseDialog course={course} courseId={courseId} />}
             <Button onClick={handlePublish}>
                 {course?.status === 'published' ? <XCircle className="mr-2 h-4 w-4" /> : <CheckCircle className="mr-2 h-4 w-4" />}
                 {course?.status === 'published' ? 'Unpublish Course' : 'Publish Course'}
