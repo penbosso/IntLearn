@@ -13,20 +13,62 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Zap, Flame, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useUser } from '@/firebase';
+import { useUser, useFirestore } from '@/firebase';
 import { getCurrentUser, type User } from '@/lib/auth';
 import { EarnedBadges } from '@/components/earned-badges';
+import { doc, updateDoc } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
 
 
 export default function SettingsPage() {
   const { user: firebaseUser, isUserLoading } = useUser();
   const [user, setUser] = useState<User | null>(null);
+  const [displayName, setDisplayName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const firestore = useFirestore();
+  const { toast } = useToast();
   
   useEffect(() => {
     if (!isUserLoading && firebaseUser) {
-      getCurrentUser(firebaseUser).then(setUser);
+      getCurrentUser(firebaseUser).then(user => {
+        setUser(user);
+        setDisplayName(user.name);
+      });
     }
   }, [firebaseUser, isUserLoading]);
+
+  const handleSaveChanges = async () => {
+    if (!firebaseUser || !displayName.trim()) {
+        toast({
+            variant: 'destructive',
+            title: 'Invalid Name',
+            description: 'Name cannot be empty.',
+        });
+        return;
+    }
+
+    setIsSaving(true);
+    try {
+        const userRef = doc(firestore, 'users', firebaseUser.uid);
+        await updateDoc(userRef, {
+            displayName: displayName.trim(),
+        });
+        toast({
+            title: 'Profile Updated',
+            description: 'Your changes have been saved successfully.',
+        });
+        // Optionally, refetch user to update state if needed, though Firestore listener should do it
+    } catch (error: any) {
+        toast({
+            variant: 'destructive',
+            title: 'Error Saving',
+            description: error.message || 'Could not save your changes.',
+        });
+    } finally {
+        setIsSaving(false);
+    }
+  };
+
 
   if (isUserLoading || !user) {
     return (
@@ -50,22 +92,25 @@ export default function SettingsPage() {
               <div className="flex items-center gap-4">
                 <Avatar className="h-20 w-20">
                   <AvatarImage src={user.avatarUrl} alt={user.name} />
-                  <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                  <AvatarFallback>{displayName.charAt(0)}</AvatarFallback>
                 </Avatar>
                 <div>
-                  <h2 className="text-xl font-semibold">{user.name}</h2>
+                  <h2 className="text-xl font-semibold">{displayName}</h2>
                   <p className="text-sm text-muted-foreground">{user.email}</p>
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="name">Full Name</Label>
-                <Input id="name" defaultValue={user.name} />
+                <Input id="name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input id="email" type="email" defaultValue={user.email} disabled />
               </div>
-              <Button className="w-full">Save Changes</Button>
+              <Button className="w-full" onClick={handleSaveChanges} disabled={isSaving}>
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {isSaving ? 'Saving...' : 'Save Changes'}
+                </Button>
             </CardContent>
           </Card>
         </div>
@@ -94,7 +139,7 @@ export default function SettingsPage() {
                 </Card>
            </div>
 
-          <EarnedBadges />
+          <EarnedBadges userId={user.id} />
         </div>
       </div>
     </div>
