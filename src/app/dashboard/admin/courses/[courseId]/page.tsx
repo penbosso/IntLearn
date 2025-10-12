@@ -46,7 +46,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Check, CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2, XCircle, File as FileIcon } from 'lucide-react';
 import { useCollection, useDoc, useMemoFirebase, useAuth, useFirestore, useUser } from '@/firebase';
-import { doc, collection, query, writeBatch, serverTimestamp, deleteDoc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, collection, query, writeBatch, serverTimestamp, deleteDoc, updateDoc, getDoc, setDoc, addDoc } from 'firebase/firestore';
 import {
     Select,
     SelectContent,
@@ -54,6 +54,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { CreatableCombobox } from "@/components/ui/combobox";
 import { useToast } from '@/hooks/use-toast';
 import { generateFlashcardsAndQuestions } from '@/ai/flows/generate-flashcards-and-questions';
 import { getCurrentUser } from '@/lib/auth';
@@ -290,9 +291,10 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
   );
 }
 
-function EditContentDialog({ item, topics, originalTopicId, courseId, type, children }: { item: any, topics: any[], originalTopicId: string, courseId: string, type: 'flashcard' | 'question', children: React.ReactNode }) {
+function EditContentDialog({ item, topics, originalTopicId, courseId, type, children, onContentMoved }: { item: any, topics: any[], originalTopicId: string, courseId: string, type: 'flashcard' | 'question', children: React.ReactNode, onContentMoved: () => void }) {
     const { toast } = useToast();
     const firestore = useFirestore();
+    const { user: firebaseUser } = useUser();
     const [loading, setLoading] = useState(false);
     const [content, setContent] = useState(item);
     const [selectedTopicId, setSelectedTopicId] = useState(originalTopicId);
@@ -303,11 +305,26 @@ function EditContentDialog({ item, topics, originalTopicId, courseId, type, chil
         setSelectedTopicId(originalTopicId);
     }, [item, originalTopicId]);
 
+    const handleCreateTopic = async (topicName: string): Promise<string> => {
+        if (!firebaseUser) throw new Error("User not authenticated.");
+
+        const newTopicRef = await addDoc(collection(firestore, `courses/${courseId}/topics`), {
+            name: topicName,
+            description: `New topic: ${topicName}`,
+            courseId: courseId,
+            adminId: firebaseUser.uid,
+            createdAt: serverTimestamp(),
+        });
+        toast({ title: "Topic Created", description: `Successfully created "${topicName}".` });
+        return newTopicRef.id;
+    };
+
     const handleSave = async () => {
         setLoading(true);
         const collectionName = type === 'flashcard' ? 'flashcards' : 'questions';
 
         try {
+             if (!firebaseUser) throw new Error("User not authenticated.");
             // If topic hasn't changed, just update the document
             if (selectedTopicId === originalTopicId) {
                 const itemRef = doc(firestore, `courses/${courseId}/topics/${originalTopicId}/${collectionName}`, item.id);
@@ -315,16 +332,16 @@ function EditContentDialog({ item, topics, originalTopicId, courseId, type, chil
             } else {
                 // Topic changed, so we need to move the document
                 const batch = writeBatch(firestore);
-
-                // 1. Get original doc data
                 const oldDocRef = doc(firestore, `courses/${courseId}/topics/${originalTopicId}/${collectionName}`, item.id);
-                
-                // 2. Create new doc in the new topic
                 const newDocRef = doc(firestore, `courses/${courseId}/topics/${selectedTopicId}/${collectionName}`, item.id);
-                const updatedContent = { ...content, topicId: selectedTopicId };
+                
+                const updatedContent = { 
+                    ...content, 
+                    topicId: selectedTopicId,
+                    // ensure adminId is present
+                    adminId: content.adminId || firebaseUser.uid 
+                };
                 batch.set(newDocRef, updatedContent);
-
-                // 3. Delete old doc
                 batch.delete(oldDocRef);
 
                 await batch.commit();
@@ -334,6 +351,7 @@ function EditContentDialog({ item, topics, originalTopicId, courseId, type, chil
                 title: 'Content Updated',
                 description: `The ${type} has been successfully saved.`,
             });
+            onContentMoved();
             setOpen(false);
         } catch (error: any) {
              console.error("Failed to save content:", error);
@@ -347,6 +365,8 @@ function EditContentDialog({ item, topics, originalTopicId, courseId, type, chil
         }
     };
     
+    const topicOptions = useMemo(() => topics.map(t => ({ value: t.id, label: t.name })), [topics]);
+
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>{children}</DialogTrigger>
@@ -357,16 +377,21 @@ function EditContentDialog({ item, topics, originalTopicId, courseId, type, chil
                 <div className="py-4 space-y-4">
                      <div className="space-y-2">
                         <Label htmlFor="edit-topic">Topic</Label>
-                        <Select onValueChange={setSelectedTopicId} value={selectedTopicId}>
-                            <SelectTrigger id="edit-topic">
-                                <SelectValue placeholder="Select a topic" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {topics.map(topic => (
-                                    <SelectItem key={topic.id} value={topic.id}>{topic.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                        <CreatableCombobox
+                            options={topicOptions}
+                            value={selectedTopicId}
+                            onChange={setSelectedTopicId}
+                            onCreate={async (newTopicName) => {
+                                try {
+                                    const newTopicId = await handleCreateTopic(newTopicName);
+                                    setSelectedTopicId(newTopicId);
+                                    onContentMoved(); // This will trigger a refetch of topics
+                                } catch (error: any) {
+                                     toast({ variant: "destructive", title: "Error Creating Topic", description: error.message });
+                                }
+                            }}
+                            placeholder="Select or create a topic..."
+                        />
                     </div>
                     {type === 'flashcard' ? (
                         <>
@@ -471,7 +496,7 @@ export default function AdminCourseReviewPage() {
   const isLoading = isCourseLoading || areTopicsLoading; // Main page loading state
   const isContentLoading = areFlashcardsLoading || areQuestionsLoading; // Content-specific loading
 
-  const handleContentAdded = () => {
+  const handleContentRefresh = () => {
     setRefreshKey(prev => prev + 1); // Increment to trigger refetch
   };
 
@@ -550,7 +575,7 @@ export default function AdminCourseReviewPage() {
           </p>
         </div>
         <div className="flex gap-2">
-            <AddContentDialog courseId={courseId} onContentAdded={handleContentAdded} />
+            <AddContentDialog courseId={courseId} onContentAdded={handleContentRefresh} />
             <Button onClick={handlePublish}>
                 {course?.status === 'published' ? <XCircle className="mr-2 h-4 w-4" /> : <CheckCircle className="mr-2 h-4 w-4" />}
                 {course?.status === 'published' ? 'Unpublish Course' : 'Publish Course'}
@@ -625,7 +650,7 @@ export default function AdminCourseReviewPage() {
                                     <Check className="h-4 w-4 mr-1" /> Approve
                                 </Button>
                             )}
-                            <EditContentDialog item={fc} topics={topics || []} originalTopicId={topicId!} courseId={courseId} type="flashcard">
+                            <EditContentDialog item={fc} topics={topics || []} originalTopicId={topicId!} courseId={courseId} type="flashcard" onContentMoved={handleContentRefresh}>
                                 <Button variant="ghost" size="icon">
                                     <Edit className="h-4 w-4" />
                                 </Button>
@@ -697,7 +722,7 @@ export default function AdminCourseReviewPage() {
                                     <Check className="h-4 w-4 mr-1" /> Approve
                                 </Button>
                             )}
-                          <EditContentDialog item={q} topics={topics || []} originalTopicId={topicId!} courseId={courseId} type="question">
+                          <EditContentDialog item={q} topics={topics || []} originalTopicId={topicId!} courseId={courseId} type="question" onContentMoved={handleContentRefresh}>
                             <Button variant="ghost" size="icon">
                                 <Edit className="h-4 w-4" />
                             </Button>
