@@ -22,6 +22,7 @@ import type { Course, QuizAttempt } from '@/lib/data';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection, query, where, collectionGroup } from 'firebase/firestore';
 import { useUser } from '@/firebase';
+import AdminAnalyticsChart from '@/components/admin-analytics-chart';
 
 
 export default function AdminDashboardPage() {
@@ -120,6 +121,16 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+       <Card>
+          <CardHeader>
+              <CardTitle>Daily Engagement</CardTitle>
+              <CardDescription>Quiz attempts over the last 30 days.</CardDescription>
+          </CardHeader>
+          <CardContent>
+              <AdminAnalyticsChart />
+          </CardContent>
+       </Card>
 
        <Card>
         <CardHeader>
