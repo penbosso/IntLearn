@@ -536,6 +536,7 @@ export default function AdminCourseReviewPage() {
   const [selectedQuestions, setSelectedQuestions] = useState<string[]>([]);
   const [bulkActionTopic, setBulkActionTopic] = useState('');
   const [isBulkTopicDialogOpen, setIsBulkTopicDialogOpen] = useState(false);
+  const [isBulkActionLoading, setIsBulkActionLoading] = useState(false);
 
 
   // Memoize Firestore references
@@ -621,6 +622,7 @@ export default function AdminCourseReviewPage() {
     const selectedIds = type === 'flashcard' ? selectedFlashcards : selectedQuestions;
     if (selectedIds.length === 0 || !topicId) return;
 
+    setIsBulkActionLoading(true);
     const collectionPath = type === 'flashcard' ? 'flashcards' : 'questions';
     const batch = writeBatch(firestore);
 
@@ -639,6 +641,8 @@ export default function AdminCourseReviewPage() {
       else setSelectedQuestions([]);
     } catch (error: any) {
       toast({ variant: 'destructive', title: 'Bulk Approval Failed', description: error.message });
+    } finally {
+        setIsBulkActionLoading(false);
     }
   };
   
@@ -652,6 +656,7 @@ export default function AdminCourseReviewPage() {
   const handleConfirmBulkTopicChange = async (type: 'flashcard' | 'question') => {
     if (!bulkActionTopic || !topicId) return;
 
+    setIsBulkActionLoading(true);
     const selectedIds = type === 'flashcard' ? selectedFlashcards : selectedQuestions;
     const collectionName = type === 'flashcard' ? 'flashcards' : 'questions';
     const batch = writeBatch(firestore);
@@ -688,6 +693,8 @@ export default function AdminCourseReviewPage() {
     } catch (error: any) {
         console.error('Bulk topic change failed', error);
         toast({ variant: 'destructive', title: 'Bulk Topic Change Failed', description: error.message });
+    } finally {
+        setIsBulkActionLoading(false);
     }
   };
 
@@ -796,14 +803,18 @@ export default function AdminCourseReviewPage() {
                 {selectedFlashcards.length > 0 && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline">
-                                Actions <ChevronDown className="ml-2 h-4 w-4" />
+                            <Button variant="outline" disabled={isBulkActionLoading}>
+                                {isBulkActionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ChevronDown className="mr-2 h-4 w-4" />}
+                                Actions ({selectedFlashcards.length})
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleBulkApprove('flashcard')}>Approve ({selectedFlashcards.length})</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleInitiateBulkTopicChange('flashcard')}>
-                                Change Topic ({selectedFlashcards.length})
+                            <DropdownMenuItem onClick={() => handleBulkApprove('flashcard')} disabled={isBulkActionLoading}>
+                                {isBulkActionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Approve
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleInitiateBulkTopicChange('flashcard')} disabled={isBulkActionLoading}>
+                                Change Topic
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
@@ -909,14 +920,18 @@ export default function AdminCourseReviewPage() {
                 {selectedQuestions.length > 0 && (
                      <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline">
-                                Actions <ChevronDown className="ml-2 h-4 w-4" />
+                            <Button variant="outline" disabled={isBulkActionLoading}>
+                                {isBulkActionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ChevronDown className="mr-2 h-4 w-4" />}
+                                Actions ({selectedQuestions.length})
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleBulkApprove('question')}>Approve ({selectedQuestions.length})</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleInitiateBulkTopicChange('question')}>
-                                Change Topic ({selectedQuestions.length})
+                            <DropdownMenuItem onClick={() => handleBulkApprove('question')} disabled={isBulkActionLoading}>
+                                {isBulkActionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Approve
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleInitiateBulkTopicChange('question')} disabled={isBulkActionLoading}>
+                                Change Topic
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
@@ -1021,7 +1036,7 @@ export default function AdminCourseReviewPage() {
                 <DialogDescription>Select a new topic for the selected items.</DialogDescription>
             </DialogHeader>
             <div className="py-4">
-               <Select onValueChange={setBulkActionTopic}>
+               <Select onValueChange={setBulkActionTopic} disabled={isBulkActionLoading}>
                     <SelectTrigger>
                         <SelectValue placeholder="Select a new topic" />
                     </SelectTrigger>
@@ -1033,8 +1048,12 @@ export default function AdminCourseReviewPage() {
                 </Select>
             </div>
             <DialogFooter>
-                <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
-                <Button onClick={() => handleConfirmBulkTopicChange(selectedFlashcards.length > 0 ? 'flashcard' : 'question')}>
+                <DialogClose asChild><Button variant="ghost" disabled={isBulkActionLoading}>Cancel</Button></DialogClose>
+                <Button 
+                    onClick={() => handleConfirmBulkTopicChange(selectedFlashcards.length > 0 ? 'flashcard' : 'question')}
+                    disabled={isBulkActionLoading || !bulkActionTopic}
+                >
+                    {isBulkActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Move Items
                 </Button>
             </DialogFooter>
