@@ -9,11 +9,10 @@ import {
 } from '@/firebase';
 import {
   collection,
-  collectionGroup,
   query,
   where,
 } from 'firebase/firestore';
-import type { Topic, QuizAttempt, Flashcard, Question } from '@/lib/data';
+import type { Topic, QuizAttempt } from '@/lib/data';
 
 const PASSING_THRESHOLD = 70; // 70%
 
@@ -51,58 +50,22 @@ export function useCourseProgress(courseId: string | null) {
   const { data: quizAttempts, isLoading: areAttemptsLoading } =
     useCollection<QuizAttempt>(attemptsQuery);
 
-  // 3. Fetch all approved flashcards and questions for the entire course to determine which topics have content
-  const flashcardsQuery = useMemoFirebase(
-    () =>
-      firestore && courseId
-        ? query(
-            collectionGroup(firestore, 'flashcards'),
-            where('courseId', '==', courseId),
-            where('status', '==', 'approved')
-          )
-        : null,
-    [firestore, courseId]
-  );
-  const { data: allFlashcards, isLoading: areFlashcardsLoading } =
-    useCollection<Flashcard>(flashcardsQuery);
-
-  const questionsQuery = useMemoFirebase(
-    () =>
-      firestore && courseId
-        ? query(
-            collectionGroup(firestore, 'questions'),
-            where('courseId', '==', courseId),
-            where('status', '==', 'approved')
-          )
-        : null,
-    [firestore, courseId]
-  );
-  const { data: allQuestions, isLoading: areQuestionsLoading } =
-    useCollection<Question>(questionsQuery);
-
-  const isLoading =
-    !courseId || // Ensure courseId is present before calculating
-    areTopicsLoading ||
-    areAttemptsLoading ||
-    areFlashcardsLoading ||
-    areQuestionsLoading;
+  const isLoading = areTopicsLoading || areAttemptsLoading;
 
   // 4. Memoize the calculation of progress
   const { progress, completedTopics } = useMemo(() => {
-    if (isLoading || !topics || !quizAttempts || !allFlashcards || !allQuestions) {
+    if (isLoading || !topics || !quizAttempts) {
       return { progress: 0, completedTopics: [] };
     }
 
-    // Determine which topics have actual, approved content
-    const contentTopicIds = new Set([
-        ...allFlashcards.map(fc => fc.topicId),
-        ...allQuestions.map(q => q.topicId)
-    ]);
+    // A topic is considered "active" or "relevant" if the user has attempted a quiz for it.
+    const attemptedTopicIds = new Set(quizAttempts.map(attempt => attempt.quizId));
     
-    const relevantTopics = topics.filter(topic => contentTopicIds.has(topic.id));
+    const relevantTopics = topics.filter(topic => attemptedTopicIds.has(topic.id));
 
     if (relevantTopics.length === 0) {
-      return { progress: 100, completedTopics: [] }; // No content, so course is 100% "complete"
+      // If no topics have been attempted, progress is 0.
+      return { progress: 0, completedTopics: [] };
     }
 
     // Find all topics where the user has at least one passing quiz attempt
@@ -118,7 +81,7 @@ export function useCourseProgress(courseId: string | null) {
     const progressPercentage = (completed.length / relevantTopics.length) * 100;
 
     return { progress: progressPercentage, completedTopics: completed };
-  }, [topics, quizAttempts, allFlashcards, allQuestions, isLoading]);
+  }, [topics, quizAttempts, isLoading]);
 
   return { progress, completedTopics, isLoading };
 }
