@@ -1,3 +1,5 @@
+'use client';
+
 import Link from 'next/link';
 import {
   BrainCircuit,
@@ -6,12 +8,16 @@ import {
   Award,
   BookOpen,
   UploadCloud,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Logo from '@/components/logo';
+import { useUser } from '@/firebase';
 
 export default function Home() {
+  const { user, isUserLoading } = useUser();
+
   const features = [
     {
       icon: <UploadCloud className="h-10 w-10" />,
@@ -58,12 +64,22 @@ export default function Home() {
           <Logo />
           <div className="flex flex-1 items-center justify-end space-x-4">
             <nav className="flex items-center space-x-2">
-              <Button asChild variant="ghost">
-                <Link href="/auth">Login</Link>
-              </Button>
-              <Button asChild>
-                <Link href="/auth">Get Started</Link>
-              </Button>
+              {isUserLoading ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : user ? (
+                <Button asChild>
+                  <Link href="/dashboard">Go to Dashboard</Link>
+                </Button>
+              ) : (
+                <>
+                  <Button asChild variant="ghost">
+                    <Link href="/auth">Login</Link>
+                  </Button>
+                  <Button asChild>
+                    <Link href="/auth">Get Started</Link>
+                  </Button>
+                </>
+              )}
             </nav>
           </div>
         </div>
