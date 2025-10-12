@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -70,6 +70,12 @@ export default function AuthPage() {
 
   const [signinEmail, setSigninEmail] = useState('');
   const [signinPassword, setSigninPassword] = useState('');
+
+  useEffect(() => {
+    if (!isUserLoading && user) {
+      router.push('/dashboard');
+    }
+  }, [user, isUserLoading, router]);
 
   const handleSignUp = async () => {
     setLoading(true);
@@ -179,17 +185,12 @@ export default function AuthPage() {
     )
   }
 
-  if (isUserLoading) {
+  if (isUserLoading || user) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p>Loading...</p>
       </div>
     );
-  }
-
-  if (user) {
-    router.push('/dashboard');
-    return null;
   }
 
   return (
@@ -305,7 +306,7 @@ export default function AuthPage() {
                       required
                       className="pl-10"
                       value={signupEmail}
-                      onChange={(e) => setSignupEmail(e.target.value)}
+                      onChange={(e) => setSignupEmail(e.targe.value)}
                     />
                   </div>
                 </div>
