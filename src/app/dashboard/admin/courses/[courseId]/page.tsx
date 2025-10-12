@@ -19,10 +19,18 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CheckCircle, Edit, Trash2 } from 'lucide-react';
+import { CheckCircle, Edit, Trash2, ChevronsUpDown } from 'lucide-react';
 import { useCollection, useDoc, useMemoFirebase } from '@/firebase';
-import { doc, collection, query, limit } from 'firebase/firestore';
+import { doc, collection, query } from 'firebase/firestore';
 import { useFirestore } from '@/firebase';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+
 
 export default function AdminCourseReviewPage() {
   const params = useParams();
@@ -31,7 +39,8 @@ export default function AdminCourseReviewPage() {
 
   // Memoize Firestore references
   const courseRef = useMemoFirebase(() => firestore && courseId ? doc(firestore, 'courses', courseId) : null, [firestore, courseId]);
-  const topicsQuery = useMemoFirebase(() => firestore && courseId ? query(collection(firestore, `courses/${courseId}/topics`), limit(1)) : null, [firestore, courseId]);
+  // Fetch all topics for the course
+  const topicsQuery = useMemoFirebase(() => firestore && courseId ? query(collection(firestore, `courses/${courseId}/topics`)) : null, [firestore, courseId]);
 
   // Fetch data using hooks
   const { data: course, isLoading: isCourseLoading } = useDoc(courseRef);
@@ -39,11 +48,12 @@ export default function AdminCourseReviewPage() {
 
   const [topicId, setTopicId] = useState<string | null>(null);
 
+  // Set the initial topic when topics are loaded
   useEffect(() => {
-    if (topics && topics.length > 0) {
+    if (!topicId && topics && topics.length > 0) {
       setTopicId(topics[0].id);
     }
-  }, [topics]);
+  }, [topics, topicId]);
 
   const flashcardsRef = useMemoFirebase(() => firestore && courseId && topicId ? collection(firestore, `courses/${courseId}/topics/${topicId}/flashcards`) : null, [firestore, courseId, topicId]);
   const questionsRef = useMemoFirebase(() => firestore && courseId && topicId ? collection(firestore, `courses/${courseId}/topics/${topicId}/questions`) : null, [firestore, courseId, topicId]);
@@ -51,7 +61,8 @@ export default function AdminCourseReviewPage() {
   const { data: flashcards, isLoading: areFlashcardsLoading } = useCollection(flashcardsRef);
   const { data: questions, isLoading: areQuestionsLoading } = useCollection(questionsRef);
   
-  const isLoading = isCourseLoading || areTopicsLoading || areFlashcardsLoading || areQuestionsLoading;
+  const isLoading = isCourseLoading || areTopicsLoading; // Main page loading state
+  const isContentLoading = areFlashcardsLoading || areQuestionsLoading; // Content-specific loading
 
   if (!isLoading && !course) {
     notFound();
@@ -69,13 +80,18 @@ export default function AdminCourseReviewPage() {
     }
   };
 
+  const selectedTopicName = useMemo(() => {
+    if (!topics || !topicId) return 'Select a topic...';
+    return topics.find(t => t.id === topicId)?.name || 'Select a topic...';
+  }, [topics, topicId]);
+
   if (isLoading) {
     return <div>Loading course content for review...</div>
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-start">
+      <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
         <div>
           <h1 className="text-3xl font-bold font-headline">Manage: {course?.name}</h1>
           <p className="text-muted-foreground">
@@ -87,6 +103,31 @@ export default function AdminCourseReviewPage() {
           Publish Course
         </Button>
       </div>
+
+       <Card>
+        <CardHeader>
+          <CardTitle>Topic Selection</CardTitle>
+          <CardDescription>Choose a topic to review its content.</CardDescription>
+        </CardHeader>
+        <CardContent>
+            {areTopicsLoading ? (
+                <p>Loading topics...</p>
+            ) : topics && topics.length > 0 ? (
+                 <Select onValueChange={setTopicId} value={topicId || ''}>
+                    <SelectTrigger className="w-full md:w-[300px]">
+                        <SelectValue placeholder="Select a topic" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {topics.map(topic => (
+                            <SelectItem key={topic.id} value={topic.id}>{topic.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            ) : (
+                <p>No topics found for this course.</p>
+            )}
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="flashcards">
         <TabsList>
@@ -112,7 +153,7 @@ export default function AdminCourseReviewPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {areFlashcardsLoading ? (
+                  {isContentLoading ? (
                      <TableRow><TableCell colSpan={4} className="text-center">Loading flashcards...</TableCell></TableRow>
                   ) : flashcards && flashcards.length > 0 ? (
                     flashcards.map((fc) => (
@@ -161,7 +202,7 @@ export default function AdminCourseReviewPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                   {areQuestionsLoading ? (
+                   {isContentLoading ? (
                      <TableRow><TableCell colSpan={4} className="text-center">Loading questions...</TableCell></TableRow>
                   ) : questions && questions.length > 0 ? (
                     questions.map((q) => (
@@ -195,5 +236,3 @@ export default function AdminCourseReviewPage() {
     </div>
   );
 }
-
-    
