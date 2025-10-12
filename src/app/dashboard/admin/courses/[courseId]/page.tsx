@@ -46,7 +46,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Check, CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2, XCircle, File as FileIcon } from 'lucide-react';
 import { useCollection, useDoc, useMemoFirebase, useAuth, useFirestore, useUser } from '@/firebase';
-import { doc, collection, query, writeBatch, serverTimestamp, deleteDoc, updateDoc } from 'firebase/firestore';
+import { doc, collection, query, writeBatch, serverTimestamp, deleteDoc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
 import {
     Select,
     SelectContent,
@@ -290,34 +290,57 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
   );
 }
 
-function EditContentDialog({ item, topicId, courseId, type, children }: { item: any, topicId: string, courseId: string, type: 'flashcard' | 'question', children: React.ReactNode }) {
+function EditContentDialog({ item, topics, originalTopicId, courseId, type, children }: { item: any, topics: any[], originalTopicId: string, courseId: string, type: 'flashcard' | 'question', children: React.ReactNode }) {
     const { toast } = useToast();
     const firestore = useFirestore();
     const [loading, setLoading] = useState(false);
     const [content, setContent] = useState(item);
+    const [selectedTopicId, setSelectedTopicId] = useState(originalTopicId);
     const [open, setOpen] = useState(false);
 
     useEffect(() => {
         setContent(item);
-    }, [item]);
+        setSelectedTopicId(originalTopicId);
+    }, [item, originalTopicId]);
 
     const handleSave = async () => {
         setLoading(true);
-        const collectionPath = type === 'flashcard' ? `courses/${courseId}/topics/${topicId}/flashcards` : `courses/${courseId}/topics/${topicId}/questions`;
-        const itemRef = doc(firestore, collectionPath, item.id);
+        const collectionName = type === 'flashcard' ? 'flashcards' : 'questions';
 
         try {
-            await updateDoc(itemRef, content);
+            // If topic hasn't changed, just update the document
+            if (selectedTopicId === originalTopicId) {
+                const itemRef = doc(firestore, `courses/${courseId}/topics/${originalTopicId}/${collectionName}`, item.id);
+                await updateDoc(itemRef, content);
+            } else {
+                // Topic changed, so we need to move the document
+                const batch = writeBatch(firestore);
+
+                // 1. Get original doc data
+                const oldDocRef = doc(firestore, `courses/${courseId}/topics/${originalTopicId}/${collectionName}`, item.id);
+                
+                // 2. Create new doc in the new topic
+                const newDocRef = doc(firestore, `courses/${courseId}/topics/${selectedTopicId}/${collectionName}`, item.id);
+                const updatedContent = { ...content, topicId: selectedTopicId };
+                batch.set(newDocRef, updatedContent);
+
+                // 3. Delete old doc
+                batch.delete(oldDocRef);
+
+                await batch.commit();
+            }
+
             toast({
                 title: 'Content Updated',
                 description: `The ${type} has been successfully saved.`,
             });
             setOpen(false);
         } catch (error: any) {
+             console.error("Failed to save content:", error);
             toast({
                 variant: 'destructive',
                 title: 'Error Saving',
-                description: `Could not save the ${type}.`,
+                description: `Could not save the ${type}. ${error.message}`,
             });
         } finally {
             setLoading(false);
@@ -332,6 +355,19 @@ function EditContentDialog({ item, topicId, courseId, type, children }: { item: 
                     <DialogTitle>Edit {type === 'flashcard' ? 'Flashcard' : 'Question'}</DialogTitle>
                 </DialogHeader>
                 <div className="py-4 space-y-4">
+                     <div className="space-y-2">
+                        <Label htmlFor="edit-topic">Topic</Label>
+                        <Select onValueChange={setSelectedTopicId} value={selectedTopicId}>
+                            <SelectTrigger id="edit-topic">
+                                <SelectValue placeholder="Select a topic" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {topics.map(topic => (
+                                    <SelectItem key={topic.id} value={topic.id}>{topic.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
                     {type === 'flashcard' ? (
                         <>
                             <div className="space-y-2">
@@ -387,13 +423,13 @@ export default function AdminCourseReviewPage() {
   const courseId = params.courseId as string;
   const firestore = useFirestore();
   const { toast } = useToast();
-  const [refreshTopics, setRefreshTopics] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
 
 
   // Memoize Firestore references
   const courseRef = useMemoFirebase(() => firestore && courseId ? doc(firestore, 'courses', courseId) : null, [firestore, courseId]);
-  // Fetch all topics for the course, with a dependency on `refreshTopics` to allow refetching
-  const topicsQuery = useMemoFirebase(() => firestore && courseId ? query(collection(firestore, `courses/${courseId}/topics`)) : null, [firestore, courseId, refreshTopics]);
+  // Fetch all topics for the course, with a dependency on `refreshKey` to allow refetching
+  const topicsQuery = useMemoFirebase(() => firestore && courseId ? query(collection(firestore, `courses/${courseId}/topics`)) : null, [firestore, courseId, refreshKey]);
 
   // Fetch data using hooks
   const { data: course, isLoading: isCourseLoading } = useDoc(courseRef);
@@ -406,7 +442,7 @@ export default function AdminCourseReviewPage() {
       if(isCourseLoading) {
         setHasTimedOut(true);
       }
-    }, 2000); // 2 second timeout
+    }, 5000); // 5 second timeout
 
     return () => clearTimeout(timer);
   }, [isCourseLoading]);
@@ -426,8 +462,8 @@ export default function AdminCourseReviewPage() {
     }
   }, [topics, areTopicsLoading, topicId]);
 
-  const flashcardsRef = useMemoFirebase(() => firestore && courseId && topicId ? collection(firestore, `courses/${courseId}/topics/${topicId}/flashcards`) : null, [firestore, courseId, topicId]);
-  const questionsRef = useMemoFirebase(() => firestore && courseId && topicId ? collection(firestore, `courses/${courseId}/topics/${topicId}/questions`) : null, [firestore, courseId, topicId]);
+  const flashcardsRef = useMemoFirebase(() => firestore && courseId && topicId ? collection(firestore, `courses/${courseId}/topics/${topicId}/flashcards`) : null, [firestore, courseId, topicId, refreshKey]);
+  const questionsRef = useMemoFirebase(() => firestore && courseId && topicId ? collection(firestore, `courses/${courseId}/topics/${topicId}/questions`) : null, [firestore, courseId, topicId, refreshKey]);
 
   const { data: flashcards, isLoading: areFlashcardsLoading } = useCollection(flashcardsRef);
   const { data: questions, isLoading: areQuestionsLoading } = useCollection(questionsRef);
@@ -436,7 +472,7 @@ export default function AdminCourseReviewPage() {
   const isContentLoading = areFlashcardsLoading || areQuestionsLoading; // Content-specific loading
 
   const handleContentAdded = () => {
-    setRefreshTopics(prev => prev + 1); // Increment to trigger refetch
+    setRefreshKey(prev => prev + 1); // Increment to trigger refetch
   };
 
   const handleDelete = async (type: 'flashcard' | 'question', id: string) => {
@@ -589,7 +625,7 @@ export default function AdminCourseReviewPage() {
                                     <Check className="h-4 w-4 mr-1" /> Approve
                                 </Button>
                             )}
-                            <EditContentDialog item={fc} topicId={topicId!} courseId={courseId} type="flashcard">
+                            <EditContentDialog item={fc} topics={topics || []} originalTopicId={topicId!} courseId={courseId} type="flashcard">
                                 <Button variant="ghost" size="icon">
                                     <Edit className="h-4 w-4" />
                                 </Button>
@@ -661,7 +697,7 @@ export default function AdminCourseReviewPage() {
                                     <Check className="h-4 w-4 mr-1" /> Approve
                                 </Button>
                             )}
-                          <EditContentDialog item={q} topicId={topicId!} courseId={courseId} type="question">
+                          <EditContentDialog item={q} topics={topics || []} originalTopicId={topicId!} courseId={courseId} type="question">
                             <Button variant="ghost" size="icon">
                                 <Edit className="h-4 w-4" />
                             </Button>
