@@ -60,6 +60,11 @@
         "adminId": {
           "type": "string",
           "description": "Reference to the Admin who created the course. (Relationship: Admin 1:N Course)"
+        },
+        "status": {
+          "type": "string",
+          "description": "The publishing status of the course.",
+          "enum": ["draft", "published"]
         }
       },
       "required": [

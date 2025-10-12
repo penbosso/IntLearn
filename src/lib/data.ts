@@ -8,6 +8,7 @@ export type Course = {
   imageUrl: string;
   imageHint: string;
   adminId: string;
+  status?: 'draft' | 'published';
 };
 
 export type Topic = {
@@ -59,3 +60,5 @@ export const getLeaderboard = async () => {
     const sortedUsers = mockUsers.filter(u => u.role === 'student').sort((a, b) => b.xp - a.xp);
     return new Promise(resolve => setTimeout(() => resolve(sortedUsers), 50));
 };
+
+    

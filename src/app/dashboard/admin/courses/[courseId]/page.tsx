@@ -44,7 +44,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Check, CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2 } from 'lucide-react';
+import { Check, CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2, XCircle } from 'lucide-react';
 import { useCollection, useDoc, useMemoFirebase, useAuth, useFirestore, useUser } from '@/firebase';
 import { doc, collection, query, writeBatch, serverTimestamp, deleteDoc, updateDoc } from 'firebase/firestore';
 import {
@@ -450,6 +450,23 @@ export default function AdminCourseReviewPage() {
       }
   };
 
+  const handlePublish = async () => {
+    if (!courseRef) return;
+    const newStatus = course?.status === 'published' ? 'draft' : 'published';
+    try {
+        await updateDoc(courseRef, { status: newStatus });
+        toast({
+            title: `Course ${newStatus === 'published' ? 'Published' : 'Unpublished'}`,
+            description: `The course is now ${newStatus}.`,
+        });
+    } catch (error: any) {
+        toast({
+            variant: 'destructive',
+            title: 'Update Failed',
+            description: error.message,
+        });
+    }
+  };
 
   if (!isLoading && !course) {
     notFound();
@@ -482,9 +499,9 @@ export default function AdminCourseReviewPage() {
         </div>
         <div className="flex gap-2">
             <AddContentDialog courseId={courseId} onContentAdded={handleContentAdded} />
-            <Button>
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Publish Course
+            <Button onClick={handlePublish}>
+                {course?.status === 'published' ? <XCircle className="mr-2 h-4 w-4" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                {course?.status === 'published' ? 'Unpublish Course' : 'Publish Course'}
             </Button>
         </div>
       </div>
@@ -667,5 +684,4 @@ export default function AdminCourseReviewPage() {
     </div>
   );
 }
-
     

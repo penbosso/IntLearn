@@ -16,7 +16,7 @@ import Image from 'next/image';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { useEffect, useState } from 'react';
 import type { User } from '@/lib/auth';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useCourseProgress } from '@/hooks/use-course-progress';
 
@@ -27,6 +27,7 @@ type Course = {
   description: string;
   imageUrl: string;
   imageHint: string;
+  status: 'draft' | 'published';
 }
 
 export default function DashboardPage() {
@@ -35,7 +36,7 @@ export default function DashboardPage() {
   const firestore = useFirestore();
 
   const coursesQuery = useMemoFirebase(
-    () => firestore ? collection(firestore, 'courses') : null,
+    () => firestore ? query(collection(firestore, 'courses'), where('status', '==', 'published')) : null,
     [firestore]
   );
   const { data: courses, isLoading: areCoursesLoading } = useCollection<Course>(coursesQuery);
@@ -223,3 +224,4 @@ function CourseCard({ course, enroll = false }: CourseCardProps) {
     </Card>
   )
 }
+    

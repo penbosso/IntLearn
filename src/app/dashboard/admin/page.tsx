@@ -35,6 +35,17 @@ export default function AdminDashboardPage() {
   
   const { data: courses, isLoading } = useCollection<Course>(coursesQuery);
 
+  const getStatusBadge = (status?: string) => {
+    switch (status) {
+      case 'published':
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+      case 'draft':
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-start">
@@ -68,7 +79,7 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{courses?.length || 0}</div>
-            <p className="text-xs text-muted-foreground">2 courses awaiting review</p>
+            <p className="text-xs text-muted-foreground">{courses?.filter(c => c.status === 'draft').length} courses awaiting review</p>
           </CardContent>
         </Card>
         <Card>
@@ -105,8 +116,8 @@ export default function AdminDashboardPage() {
                 <TableRow key={course.id}>
                   <TableCell className="font-medium">{course.name}</TableCell>
                   <TableCell>
-                    <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
-                      Draft
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${getStatusBadge(course.status)}`}>
+                      {course.status || 'Draft'}
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
@@ -128,3 +139,4 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
+    
