@@ -36,44 +36,30 @@ export default function CourseDetailPage() {
   const { data: topics, isLoading: areTopicsLoading } = useCollection(topicsRef);
   const { progress, completedTopics, isLoading: isProgressLoading } = useCourseProgress(courseId);
   
-  const [hasTimedOut, setHasTimedOut] = useState(false);
-  
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if(isCourseLoading) {
-        setHasTimedOut(true);
-      }
-    }, 5000); // 5 second timeout
-
-    return () => clearTimeout(timer);
-  }, [isCourseLoading]);
-
   const isLoading = isCourseLoading || areTopicsLoading || isProgressLoading;
   
   const totalTopics = topics?.length || 0;
   const completedTopicsCount = completedTopics.length;
   const courseCompletion = progress;
 
-
-  if (isLoading && !hasTimedOut) {
+  if (isLoading) {
     return <div className="flex h-full w-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
         <span className="ml-4">Loading course details...</span>
     </div>
   }
 
-  if (!course) {
-    if (!isCourseLoading && (course === null || hasTimedOut)) {
-      notFound();
-    }
-    return (
-      <div className="flex h-full w-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-        <span className="ml-4">Loading course details...</span>
-      </div>
-    );
+  // After loading, if course is still null, then it's a 404.
+  // This prevents race conditions where isLoading is false but data isn't populated yet.
+  if (!isLoading && !course) {
+    notFound();
   }
-
+  
+  // This check is now safe because the one above handles the true not found case.
+  if (!course) {
+    // This return is for type-safety and should not be reached if notFound() works as expected.
+    return null;
+  }
 
   return (
     <div className="space-y-6">
