@@ -62,8 +62,16 @@ export default function CourseDetailPage() {
     </div>
   }
 
-  if (!course && hasTimedOut) {
-    notFound();
+  if (!course) {
+    if (!isCourseLoading && (course === null || hasTimedOut)) {
+      notFound();
+    }
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-4">Loading course details...</span>
+      </div>
+    );
   }
 
 
