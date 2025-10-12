@@ -300,7 +300,7 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
   );
 }
 
-function EditContentDialog({ item, topics, originalTopicId, courseId, type, children, onContentMoved }: { item: any, topics: any[], originalTopicId: string, courseId: string, type: 'flashcard' | 'question', children: React.ReactNode, onContentMoved: () => void }) {
+function EditContentDialog({ item, topics, originalTopicId, courseId, type, children, onTopicChange }: { item: any, topics: any[], originalTopicId: string, courseId: string, type: 'flashcard' | 'question', children: React.ReactNode, onTopicChange: () => void }) {
     const { toast } = useToast();
     const firestore = useFirestore();
     const { user: firebaseUser } = useUser();
@@ -325,6 +325,7 @@ function EditContentDialog({ item, topics, originalTopicId, courseId, type, chil
             createdAt: serverTimestamp(),
         });
         toast({ title: "Topic Created", description: `Successfully created "${topicName}".` });
+        onTopicChange();
         return newTopicRef.id;
     };
 
@@ -364,7 +365,7 @@ function EditContentDialog({ item, topics, originalTopicId, courseId, type, chil
                 title: 'Content Updated',
                 description: `The ${type} has been successfully saved.`,
             });
-            onContentMoved();
+            onTopicChange();
             setOpen(false);
         } catch (error: any) {
              console.error("Failed to save content:", error);
@@ -398,7 +399,6 @@ function EditContentDialog({ item, topics, originalTopicId, courseId, type, chil
                                 try {
                                     const newTopicId = await handleCreateTopic(newTopicName);
                                     setSelectedTopicId(newTopicId);
-                                    onContentMoved(); // This will trigger a refetch of topics
                                 } catch (error: any) {
                                      toast({ variant: "destructive", title: "Error Creating Topic", description: error.message });
                                 }
@@ -808,7 +808,7 @@ export default function AdminCourseReviewPage() {
                                     <Check className="h-4 w-4 mr-1" /> Approve
                                 </Button>
                             )}
-                            <EditContentDialog item={fc} topics={topics || []} originalTopicId={topicId!} courseId={courseId} type="flashcard" onContentMoved={handleContentRefresh}>
+                            <EditContentDialog item={fc} topics={topics || []} originalTopicId={topicId!} courseId={courseId} type="flashcard" onTopicChange={handleContentRefresh}>
                                 <Button variant="ghost" size="icon">
                                     <Edit className="h-4 w-4" />
                                 </Button>
@@ -921,7 +921,7 @@ export default function AdminCourseReviewPage() {
                                     <Check className="h-4 w-4 mr-1" /> Approve
                                 </Button>
                             )}
-                          <EditContentDialog item={q} topics={topics || []} originalTopicId={topicId!} courseId={courseId} type="question" onContentMoved={handleContentRefresh}>
+                          <EditContentDialog item={q} topics={topics || []} originalTopicId={topicId!} courseId={courseId} type="question" onTopicChange={handleContentRefresh}>
                             <Button variant="ghost" size="icon">
                                 <Edit className="h-4 w-4" />
                             </Button>

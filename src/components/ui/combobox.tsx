@@ -102,7 +102,7 @@ export function CreatableCombobox({
   options: ComboboxOption[]
   value: string
   onChange: (value: string) => void
-  onCreate: (value: string) => void
+  onCreate: (value: string) => Promise<string>
   placeholder?: string
   emptyMessage?: string
   className?: string
@@ -121,7 +121,9 @@ export function CreatableCombobox({
     if (existingOption) {
       onChange(existingOption.value)
     } else {
-      onCreate(trimmedLabel)
+      onCreate(trimmedLabel).then(newId => {
+          onChange(newId);
+      });
     }
     setInputValue("")
     setOpen(false)
@@ -153,6 +155,7 @@ export function CreatableCombobox({
             onValueChange={setInputValue}
             onKeyDown={(e) => {
               if (e.key === "Enter" && inputValue) {
+                e.preventDefault();
                 handleCreate(inputValue);
               }
             }}
