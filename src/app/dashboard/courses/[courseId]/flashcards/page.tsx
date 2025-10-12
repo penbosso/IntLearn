@@ -1,52 +1,33 @@
 'use client';
 
-import { getFlashcardsByTopicId, getTopicById } from '@/lib/data';
 import FlashcardDeck from '@/components/flashcard-deck';
-import { notFound } from 'next/navigation';
+import { notFound, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import type { Flashcard, Topic } from '@/lib/data';
+import { useDoc, useCollection, useMemoFirebase, useFirestore } from '@/firebase';
+import { doc, collection } from 'firebase/firestore';
 
-export default function FlashcardsPage({
-  params,
-  searchParams,
-}: {
-  params: { courseId: string };
-  searchParams: { topic: string };
-}) {
-  const { courseId } = params;
-  const { topic: topicId } = searchParams;
-  const [topic, setTopic] = useState<Topic | undefined | null>(null);
-  const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function FlashcardsPage() {
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const courseId = params.courseId as string;
+  const topicId = searchParams.get('topic');
+  const firestore = useFirestore();
 
-  useEffect(() => {
-    if (!topicId) {
+  const topicRef = useMemoFirebase(() => firestore && topicId ? doc(firestore, `courses/${courseId}/topics`, topicId) : null, [firestore, courseId, topicId]);
+  const flashcardsRef = useMemoFirebase(() => firestore && topicId ? collection(firestore, `courses/${courseId}/topics/${topicId}/flashcards`) : null, [firestore, courseId, topicId]);
+
+  const { data: topic, isLoading: isTopicLoading } = useDoc(topicRef);
+  const { data: flashcards, isLoading: areFlashcardsLoading } = useCollection(flashcardsRef);
+
+  if (!topicId) {
       notFound();
-      return;
-    }
+  }
 
-    async function fetchData() {
-      try {
-        const [topicData, flashcardsData] = await Promise.all([
-          getTopicById(topicId),
-          getFlashcardsByTopicId(topicId)
-        ]);
-        setTopic(topicData);
-        setFlashcards(flashcardsData);
-      } catch (error) {
-        console.error("Failed to fetch data", error);
-      } finally {
-        setLoading(false);
-      }
-    }
+  const isLoading = isTopicLoading || areFlashcardsLoading;
 
-    fetchData();
-  }, [topicId]);
-
-  if (loading) {
+  if (isLoading) {
       return (
         <div className="flex items-center justify-center h-full">
             <p>Loading flashcards...</p>
@@ -54,7 +35,7 @@ export default function FlashcardsPage({
       )
   }
 
-  if (!topic) {
+  if (!isLoading && !topic) {
       notFound();
   }
 
@@ -68,12 +49,12 @@ export default function FlashcardsPage({
                 Back to Topics
               </Link>
           </Button>
-          <h1 className="text-3xl font-bold font-headline">{topic?.title || 'Flashcards'}</h1>
+          <h1 className="text-3xl font-bold font-headline">{topic?.name || 'Flashcards'}</h1>
           <p className="text-muted-foreground">Review the key concepts for this topic.</p>
         </div>
       </div>
       <div className="flex-grow flex items-center justify-center">
-        {flashcards.length > 0 ? (
+        {flashcards && flashcards.length > 0 ? (
           <FlashcardDeck flashcards={flashcards} />
         ) : (
           <div className="text-center">

@@ -1,7 +1,7 @@
+'use client';
 import Image from 'next/image';
 import Link from 'next/link';
-import { getCourseById, getTopicsByCourseId, getStudentProgress } from '@/lib/data';
-import { notFound } from 'next/navigation';
+import { notFound, useParams } from 'next/navigation';
 import {
   Card,
   CardContent,
@@ -18,19 +18,36 @@ import {
 } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
 import { Book, Edit } from 'lucide-react';
+import { useDoc, useCollection, useMemoFirebase, useFirestore } from '@/firebase';
+import { doc, collection } from 'firebase/firestore';
 
-export default async function CourseDetailPage({ params }: { params: { courseId: string } }) {
-  const course = await getCourseById(params.courseId);
+
+export default function CourseDetailPage() {
+  const params = useParams();
+  const courseId = params.courseId as string;
+  const firestore = useFirestore();
+
+  const courseRef = useMemoFirebase(() => firestore && courseId ? doc(firestore, 'courses', courseId) : null, [firestore, courseId]);
+  const topicsRef = useMemoFirebase(() => firestore && courseId ? collection(firestore, `courses/${courseId}/topics`) : null, [firestore, courseId]);
+
+  const { data: course, isLoading: isCourseLoading } = useDoc(courseRef);
+  const { data: topics, isLoading: areTopicsLoading } = useCollection(topicsRef);
+  
+  // Mocking progress for now
+  const progress = { completedTopics: topics ? [topics[0]?.id].filter(Boolean) : [] };
+  const totalTopics = topics?.length || 0;
+  const completedTopicsCount = progress?.completedTopics.length || 0;
+  const courseCompletion = totalTopics > 0 ? (completedTopicsCount / totalTopics) * 100 : 0;
+
+  const isLoading = isCourseLoading || areTopicsLoading;
+
+  if (isLoading) {
+    return <div>Loading course details...</div>
+  }
+
   if (!course) {
     notFound();
   }
-
-  const topics = await getTopicsByCourseId(params.courseId);
-  // In a real app, you'd get the current user's ID
-  const progress = await getStudentProgress('1', params.courseId);
-  const totalTopics = topics.length;
-  const completedTopicsCount = progress?.completedTopics.length || 0;
-  const courseCompletion = totalTopics > 0 ? (completedTopicsCount / totalTopics) * 100 : 0;
 
 
   return (
@@ -39,15 +56,15 @@ export default async function CourseDetailPage({ params }: { params: { courseId:
         <div className="md:w-1/3">
            <Card className="overflow-hidden">
                 <Image
-                    src={course.imageUrl}
-                    alt={course.title}
+                    src={course.imageUrl || 'https://picsum.photos/seed/placeholder/600/400'}
+                    alt={course.name}
                     width={600}
                     height={400}
                     data-ai-hint={course.imageHint}
                     className="object-cover w-full h-auto"
                 />
                  <CardHeader>
-                    <CardTitle className="text-2xl">{course.title}</CardTitle>
+                    <CardTitle className="text-2xl">{course.name}</CardTitle>
                     <CardDescription>{course.description}</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -70,25 +87,25 @@ export default async function CourseDetailPage({ params }: { params: { courseId:
            <Card>
             <CardContent className="p-0">
               <Accordion type="single" collapsible className="w-full">
-                {topics.map((topic, index) => (
+                {topics && topics.map((topic, index) => (
                   <AccordionItem value={`item-${index}`} key={topic.id}>
                     <AccordionTrigger className="px-6 hover:no-underline">
                         <div className='flex items-center gap-3'>
                             <div className={`w-3 h-3 rounded-full ${progress?.completedTopics.includes(topic.id) ? 'bg-green-500' : 'bg-muted'}`}></div>
-                            <span>{topic.title}</span>
+                            <span>{topic.name}</span>
                         </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-6 bg-secondary/50">
                        <p className="text-muted-foreground mb-4 pt-4">Ready to master this topic? Choose your study method.</p>
                        <div className="flex gap-4">
                             <Button asChild>
-                                <Link href={`/dashboard/courses/${params.courseId}/flashcards?topic=${topic.id}`}>
+                                <Link href={`/dashboard/courses/${courseId}/flashcards?topic=${topic.id}`}>
                                     <Book className="mr-2 h-4 w-4" />
                                     Study Flashcards
                                 </Link>
                             </Button>
                              <Button asChild variant="outline">
-                                <Link href={`/dashboard/courses/${params.courseId}/quiz?topic=${topic.id}`}>
+                                <Link href={`/dashboard/courses/${courseId}/quiz?topic=${topic.id}`}>
                                     <Edit className="mr-2 h-4 w-4" />
                                     Start Quiz
                                 </Link>
@@ -98,7 +115,7 @@ export default async function CourseDetailPage({ params }: { params: { courseId:
                   </AccordionItem>
                 ))}
               </Accordion>
-               {topics.length === 0 && <p className="p-6 text-muted-foreground">No topics have been added to this course yet.</p>}
+               {topics?.length === 0 && <p className="p-6 text-muted-foreground">No topics have been added to this course yet.</p>}
             </CardContent>
            </Card>
         </div>

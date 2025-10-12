@@ -1,53 +1,34 @@
 'use client';
 
-import { getQuestionsByTopicId, getTopicById } from '@/lib/data';
 import QuizComponent from '@/components/quiz-component';
-import { notFound } from 'next/navigation';
+import { notFound, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import type { Question, Topic } from '@/lib/data';
+import { useDoc, useCollection, useMemoFirebase, useFirestore } from '@/firebase';
+import { doc, collection } from 'firebase/firestore';
 
 
-export default function QuizPage({
-  params,
-  searchParams,
-}: {
-  params: { courseId: string };
-  searchParams: { topic: string };
-}) {
-  const { courseId } = params;
-  const { topic: topicId } = searchParams;
-  const [topic, setTopic] = useState<Topic | undefined | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function QuizPage() {
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const courseId = params.courseId as string;
+  const topicId = searchParams.get('topic');
+  const firestore = useFirestore();
 
-  useEffect(() => {
-    if (!topicId) {
+  const topicRef = useMemoFirebase(() => firestore && topicId ? doc(firestore, `courses/${courseId}/topics`, topicId) : null, [firestore, courseId, topicId]);
+  const questionsRef = useMemoFirebase(() => firestore && topicId ? collection(firestore, `courses/${courseId}/topics/${topicId}/questions`) : null, [firestore, courseId, topicId]);
+
+  const { data: topic, isLoading: isTopicLoading } = useDoc(topicRef);
+  const { data: questions, isLoading: areQuestionsLoading } = useCollection(questionsRef);
+
+  if (!topicId) {
       notFound();
-      return;
-    }
+  }
 
-    async function fetchData() {
-        try {
-            const [topicData, questionsData] = await Promise.all([
-                getTopicById(topicId),
-                getQuestionsByTopicId(topicId)
-            ]);
-            setTopic(topicData);
-            setQuestions(questionsData);
-        } catch (error) {
-            console.error("Failed to fetch data", error);
-        } finally {
-            setLoading(false);
-        }
-    }
+  const isLoading = isTopicLoading || areQuestionsLoading;
 
-    fetchData();
-  }, [topicId]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
           <p>Loading quiz...</p>
@@ -55,7 +36,7 @@ export default function QuizPage({
     )
   }
 
-  if (!topic) {
+  if (!isLoading && !topic) {
       notFound();
   }
 
@@ -69,13 +50,13 @@ export default function QuizPage({
                 Back to Topics
               </Link>
           </Button>
-          <h1 className="text-3xl font-bold font-headline">{topic?.title || 'Quiz'}</h1>
+          <h1 className="text-3xl font-bold font-headline">{topic?.name || 'Quiz'}</h1>
           <p className="text-muted-foreground">Test your knowledge on this topic.</p>
         </div>
       </div>
 
       <div className="flex-grow flex items-center justify-center">
-        {questions.length > 0 ? (
+        {questions && questions.length > 0 ? (
           <QuizComponent questions={questions} />
         ) : (
           <div className="text-center">

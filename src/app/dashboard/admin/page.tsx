@@ -1,3 +1,5 @@
+'use client';
+
 import Link from 'next/link';
 import {
   Card,
@@ -16,11 +18,22 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { PlusCircle, Users, BarChart, BookOpen } from 'lucide-react';
-import { getCourses } from '@/lib/data';
 import type { Course } from '@/lib/data';
+import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import { collection, query, where } from 'firebase/firestore';
+import { useUser } from '@/firebase';
 
-export default async function AdminDashboardPage() {
-  const courses = await getCourses();
+
+export default function AdminDashboardPage() {
+  const { user } = useUser();
+  const firestore = useFirestore();
+
+  const coursesQuery = useMemoFirebase(
+    () => user ? query(collection(firestore, 'courses'), where('adminId', '==', user.uid)) : null,
+    [user, firestore]
+  );
+  
+  const { data: courses, isLoading } = useCollection<Course>(coursesQuery);
 
   return (
     <div className="space-y-6">
@@ -54,7 +67,7 @@ export default async function AdminDashboardPage() {
             <BookOpen className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{courses.length}</div>
+            <div className="text-2xl font-bold">{courses?.length || 0}</div>
             <p className="text-xs text-muted-foreground">2 courses awaiting review</p>
           </CardContent>
         </Card>
@@ -82,19 +95,18 @@ export default async function AdminDashboardPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Course Title</TableHead>
-                <TableHead>Topics</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {courses.map((course: Course) => (
+              {isLoading && <TableRow><TableCell colSpan={3} className="text-center">Loading courses...</TableCell></TableRow>}
+              {!isLoading && courses && courses.map((course: Course) => (
                 <TableRow key={course.id}>
-                  <TableCell className="font-medium">{course.title}</TableCell>
-                  <TableCell>5</TableCell>
+                  <TableCell className="font-medium">{course.name}</TableCell>
                   <TableCell>
-                    <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                      Published
+                    <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                      Draft
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
@@ -104,6 +116,11 @@ export default async function AdminDashboardPage() {
                   </TableCell>
                 </TableRow>
               ))}
+               {!isLoading && (!courses || courses.length === 0) && (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-center">You haven't created any courses yet.</TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
