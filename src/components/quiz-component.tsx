@@ -9,14 +9,14 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { Check, X, Repeat, ArrowRight, Trophy, SkipForward } from 'lucide-react';
+import { Check, X, Repeat, ArrowRight, Trophy, SkipForward, Loader2 } from 'lucide-react';
 import { useFirestore, useUser } from '@/firebase';
 import { addDoc, collection, serverTimestamp, doc, runTransaction, updateDoc, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useParams, useSearchParams } from 'next/navigation';
 import { differenceInCalendarDays } from 'date-fns';
 import { awardBadges } from '@/lib/badges/badge-engine';
-
+import { evaluateAnswer } from '@/ai/flows/evaluate-answer-flow';
 
 type AnswerState = 'unanswered' | 'correct' | 'incorrect';
 
@@ -25,6 +25,7 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [answerState, setAnswerState] = useState<AnswerState>('unanswered');
+  const [isEvaluating, setIsEvaluating] = useState(false);
   const [score, setScore] = useState(0);
   const [showResults, setShowResults] = useState(false);
   const [shortAnswerText, setShortAnswerText] = useState('');
@@ -147,11 +148,37 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
   };
 
 
-  const handleCheckAnswer = () => {
+  const handleCheckAnswer = async () => {
     const answerToCheck = currentQuestion.type === 'Short Answer' ? shortAnswerText : selectedAnswer;
     if (!answerToCheck) return;
 
-    const isCorrect = answerToCheck.trim().toLowerCase() === currentQuestion.answer.trim().toLowerCase();
+    let isCorrect = false;
+
+    if (currentQuestion.type === 'Short Answer') {
+        setIsEvaluating(true);
+        try {
+            const result = await evaluateAnswer({
+                question: currentQuestion.text,
+                correctAnswer: currentQuestion.answer,
+                studentAnswer: answerToCheck,
+            });
+            isCorrect = result.isCorrect;
+            toast({
+                title: result.isCorrect ? 'Correct!' : 'Incorrect',
+                description: result.feedback,
+            });
+        } catch (error) {
+            console.error("AI evaluation failed, falling back to exact match", error);
+            // Fallback to simple check on AI error
+            isCorrect = answerToCheck.trim().toLowerCase() === currentQuestion.answer.trim().toLowerCase();
+        } finally {
+            setIsEvaluating(false);
+        }
+    } else {
+        isCorrect = answerToCheck.trim().toLowerCase() === currentQuestion.answer.trim().toLowerCase();
+    }
+
+
     if (isCorrect) {
       setScore(score + 1);
       setAnswerState('correct');
@@ -196,7 +223,7 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
     if (answerState !== 'unanswered') {
       const timer = setTimeout(() => {
         handleNextQuestion();
-      }, 1200); // Wait 1.2 seconds before moving to the next question
+      }, 1500); // Wait 1.5 seconds before moving to the next question
       return () => clearTimeout(timer);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -244,11 +271,12 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
         <p className="text-lg font-semibold mb-6 min-h-[3em]">{currentQuestion.text}</p>
         
         {currentQuestion.type === 'Short Answer' ? (
-          <Input 
+          <Textarea 
             value={shortAnswerText}
             onChange={(e) => setShortAnswerText(e.target.value)}
             placeholder="Type your answer here..."
-            disabled={answerState !== 'unanswered'}
+            disabled={answerState !== 'unanswered' || isEvaluating}
+            className="min-h-24"
           />
         ) : (
           <RadioGroup
@@ -296,16 +324,17 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
             <div className="flex gap-4 mt-6">
                 <Button 
                     onClick={handleCheckAnswer}
-                    disabled={!canSubmit}
+                    disabled={!canSubmit || isEvaluating}
                     className="w-full"
                 >
-                    <Check className="mr-2 h-4 w-4"/>
-                    Submit
+                    {isEvaluating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Check className="mr-2 h-4 w-4"/>}
+                    {isEvaluating ? 'Evaluating...' : 'Submit'}
                 </Button>
                 <Button 
                     variant="outline" 
                     onClick={handleSkip} 
                     className="w-full"
+                    disabled={isEvaluating}
                 >
                     <SkipForward className="mr-2 h-4 w-4" />
                     Skip
