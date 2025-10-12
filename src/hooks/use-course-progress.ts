@@ -81,6 +81,7 @@ export function useCourseProgress(courseId: string | null) {
     useCollection<Question>(questionsQuery);
 
   const isLoading =
+    !courseId || // Ensure courseId is present before calculating
     areTopicsLoading ||
     areAttemptsLoading ||
     areFlashcardsLoading ||
