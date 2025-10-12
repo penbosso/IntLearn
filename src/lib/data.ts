@@ -1,3 +1,4 @@
+
 // This file is now primarily for types and mock data for leaderboards.
 // Course and topic data will be fetched directly from Firestore in components.
 
@@ -22,6 +23,7 @@ export type Flashcard = {
   topicId: string;
   front: string;
   back: string;
+  status: 'needs-review' | 'approved';
 };
 
 export type FlashcardMastery = {
@@ -42,6 +44,7 @@ export type Question = {
   type: 'MCQ' | 'True/False' | 'Short Answer';
   options?: string[];
   answer: string;
+  status: 'needs-review' | 'approved';
 };
 
 export type QuizAttempt = {
@@ -72,11 +75,3 @@ export type UserBadge = {
     badgeId: string;
     earnedDate: any; // Firestore Timestamp
 }
-
-
-// This function can be used for features that don't need live data, like the leaderboard.
-export const getLeaderboard = async () => {
-    const { mockUsers } = await import('./auth');
-    const sortedUsers = mockUsers.filter(u => u.role === 'student').sort((a, b) => b.xp - a.xp);
-    return new Promise(resolve => setTimeout(() => resolve(sortedUsers), 50));
-};

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -7,11 +8,11 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { Check, X, Repeat, ArrowRight, Trophy, SkipForward, Loader2 } from 'lucide-react';
+import { Check, X, Repeat, Trophy, SkipForward, Loader2 } from 'lucide-react';
 import { useFirestore, useUser } from '@/firebase';
-import { addDoc, collection, serverTimestamp, doc, runTransaction, updateDoc, Timestamp } from 'firebase/firestore';
+import { collection, runTransaction, doc, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useParams, useSearchParams } from 'next/navigation';
 import { differenceInCalendarDays } from 'date-fns';
@@ -63,18 +64,18 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
             }
 
             // 1. Save the quiz attempt
-            const quizAttemptRef = collection(firestore, `users/${user.uid}/quizAttempts`);
+            const quizAttemptRef = doc(collection(firestore, `users/${user.uid}/quizAttempts`));
             const attemptData = {
                 userId: user.uid,
                 courseId: courseId, // Save courseId
                 quizId: topicId, // Using topicId as quizId for now
                 topicName: topicName,
                 score: percentage,
-                attemptedDate: serverTimestamp(),
+                attemptedDate: Timestamp.now(),
                 correctAnswers: finalScore,
                 totalQuestions: questions.length,
             };
-            transaction.set(doc(quizAttemptRef), attemptData);
+            transaction.set(quizAttemptRef, attemptData);
 
             // 2. Update user's XP and Streak
             const currentXp = userDoc.data().xp || 0;
@@ -202,8 +203,12 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
   };
 
   const handleSkip = () => {
+    if(questions.length <= 1) return; // Don't skip if only one question left
     const questionToSkip = questions[currentIndex];
-    setQuestions([...questions.slice(0, currentIndex), ...questions.slice(currentIndex + 1), questionToSkip]);
+    // Create a new array with the skipped question at the end
+    const newQuestions = [...questions.slice(0, currentIndex), ...questions.slice(currentIndex + 1), questionToSkip];
+    setQuestions(newQuestions);
+    // Reset state for the new current question
     setSelectedAnswer(null);
     setAnswerState('unanswered');
     setShortAnswerText('');

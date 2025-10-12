@@ -120,7 +120,7 @@ export default function StudentDetailPage() {
         <Avatar className="h-24 w-24 border-4">
           <AvatarImage src={student.avatarUrl} alt={student.name} />
           <AvatarFallback className="text-3xl">
-            {student.name.charAt(0)}
+            {student.name ? student.name.charAt(0) : 'U'}
           </AvatarFallback>
         </Avatar>
         <div>
@@ -136,7 +136,7 @@ export default function StudentDetailPage() {
                 <Zap className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-                <div className="text-2xl font-bold">{student.xp.toLocaleString()}</div>
+                <div className="text-2xl font-bold">{(student.xp || 0).toLocaleString()}</div>
             </CardContent>
         </Card>
         <Card>
@@ -145,7 +145,7 @@ export default function StudentDetailPage() {
                 <Flame className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-                <div className="text-2xl font-bold">{student.streak} Days</div>
+                <div className="text-2xl font-bold">{student.streak || 0} Days</div>
             </CardContent>
         </Card>
          <Card>
@@ -202,7 +202,7 @@ export default function StudentDetailPage() {
                 quizAttempts.map((attempt) => (
                   <TableRow key={attempt.id}>
                     <TableCell className="font-medium">{attempt.topicName}</TableCell>
-                    <TableCell>{format(attempt.attemptedDate.toDate(), 'PPpp')}</TableCell>
+                    <TableCell>{attempt.attemptedDate.toDate().toLocaleString()}</TableCell>
                     <TableCell className="text-right font-bold text-lg">{attempt.score}%</TableCell>
                   </TableRow>
                 ))

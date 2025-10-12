@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -176,7 +177,7 @@ export default function PerformancePage() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="text-right font-bold text-lg">{user.xp.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-bold text-lg">{(user.xp || 0).toLocaleString()}</TableCell>
                 </TableRow>
               ))}
                {!isLeaderboardLoading && leaderboardData?.length === 0 && (
