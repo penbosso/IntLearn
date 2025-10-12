@@ -14,7 +14,7 @@ import { BookOpenCheck, Flame, Zap, ArrowRight, Book, Edit, Loader2 } from 'luci
 import { getCurrentUser } from '@/lib/auth';
 import Image from 'next/image';
 import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import type { User } from '@/lib/auth';
 import { collection, addDoc, serverTimestamp, query, where, orderBy, limit, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -298,4 +298,3 @@ function CourseCard({ course, enroll = false }: CourseCardProps) {
     </Card>
   )
 }
-    
