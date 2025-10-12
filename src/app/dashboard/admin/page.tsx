@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -23,15 +24,24 @@ import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection, query, where, collectionGroup } from 'firebase/firestore';
 import { useUser } from '@/firebase';
 import AdminAnalyticsChart from '@/components/admin-analytics-chart';
+import { useEffect, useState } from 'react';
+import { getCurrentUser, User } from '@/lib/auth';
 
 
 export default function AdminDashboardPage() {
-  const { user } = useUser();
+  const { user: firebaseUser } = useUser();
+  const [user, setUser] = useState<User | null>(null);
   const firestore = useFirestore();
 
+  useEffect(() => {
+    if (firebaseUser) {
+      getCurrentUser(firebaseUser).then(setUser);
+    }
+  }, [firebaseUser]);
+
   const coursesQuery = useMemoFirebase(
-    () => user ? query(collection(firestore, 'courses'), where('adminId', '==', user.uid)) : null,
-    [user, firestore]
+    () => firebaseUser ? query(collection(firestore, 'courses'), where('adminId', '==', firebaseUser.uid)) : null,
+    [firebaseUser, firestore]
   );
   
   const { data: courses, isLoading: areCoursesLoading } = useCollection<Course>(coursesQuery);
@@ -58,13 +68,22 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const isLoading = areCoursesLoading || areAttemptsLoading;
+  const isLoading = areCoursesLoading || areAttemptsLoading || !user;
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-4">Loading Admin Dashboard...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-start">
         <div>
-            <h1 className="text-3xl font-bold font-headline">Admin Dashboard</h1>
+            <h1 className="text-3xl font-bold font-headline">Welcome, {user?.name.split(' ')[0]}!</h1>
             <p className="text-muted-foreground">Manage courses, content, and student progress.</p>
         </div>
         <Button asChild>
