@@ -50,7 +50,6 @@ export default function CourseDetailPage() {
   }
 
   // After loading, if course is still null, then it's a 404.
-  // This prevents race conditions where isLoading is false but data isn't populated yet.
   if (!course) {
     notFound();
     return null; // Keep TypeScript happy, notFound() should throw.
