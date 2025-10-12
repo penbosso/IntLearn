@@ -46,11 +46,11 @@ export default function AdminDashboardPage() {
   
   const { data: courses, isLoading: areCoursesLoading } = useCollection<Course>(coursesQuery);
 
-  const allAttemptsQuery = useMemoFirebase(
-    () => firestore ? query(collectionGroup(firestore, 'quizAttempts')) : null,
+  const studentsQuery = useMemoFirebase(
+    () => firestore ? query(collection(firestore, 'users'), where('role', '==', 'student')) : null,
     [firestore]
   );
-  const { data: allAttempts, isLoading: areAttemptsLoading } = useCollection<QuizAttempt>(allAttemptsQuery);
+  const { data: students, isLoading: areStudentsLoading } = useCollection<User>(studentsQuery);
 
 
   const getStatusBadge = (status?: string) => {
@@ -64,7 +64,7 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const isLoading = areCoursesLoading || areAttemptsLoading || !user;
+  const isLoading = areCoursesLoading || areStudentsLoading || !user;
 
   if (isLoading) {
     return (
@@ -107,14 +107,14 @@ export default function AdminDashboardPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Student Engagement</CardTitle>
-            <BarChart className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total Students</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {areAttemptsLoading ? <Loader2 className="h-6 w-6 animate-spin"/> :
+            {areStudentsLoading ? <Loader2 className="h-6 w-6 animate-spin"/> :
                 <>
-                    <div className="text-2xl font-bold">{allAttempts?.length || 0}</div>
-                    <p className="text-xs text-muted-foreground">Total quiz attempts across all courses</p>
+                    <div className="text-2xl font-bold">{students?.length || 0}</div>
+                    <p className="text-xs text-muted-foreground">Total students on the platform</p>
                 </>
             }
           </CardContent>
