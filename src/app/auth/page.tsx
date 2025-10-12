@@ -74,40 +74,76 @@ export default function AuthPage() {
   const handleSignUp = async () => {
     setLoading(true);
     try {
-      // Non-blocking call
-      initiateEmailSignUp(auth, signupEmail, signupPassword);
+      // Non-blocking call. The onAuthStateChanged listener handles user creation.
+      initiateEmailSignUp(auth, signupEmail, signupPassword, 
+        async (userCredential) => {
+          const user = userCredential.user;
+          const userRef = doc(firestore, 'users', user.uid);
+          const userDoc = await getDoc(userRef);
 
-      // We can't immediately get the user, so we wait for the auth state to change.
-      // For this prototype, we will assume user creation is successful and we can create a user doc.
-      // In a real app, you would use onAuthStateChanged listener or a backend function to create the user doc.
-      const userRef = doc(firestore, 'users', signupEmail); // using email as ID for simplicity
-      await setDoc(userRef, {
-        displayName: signupName,
-        email: signupEmail,
-        role: 'student', // default role
-      });
+          if (!userDoc.exists()) {
+             await setDoc(userRef, {
+                displayName: signupName,
+                email: user.email,
+                role: 'student', // default role
+                xp: 0,
+                streak: 0,
+             });
+          }
 
-      toast({
-        title: 'Account Created',
-        description: "We've created your account for you.",
-      });
-      // The useUser hook will redirect to /dashboard
+          toast({
+            title: 'Account Created',
+            description: "We've created your account for you.",
+          });
+        }, 
+        (error) => {
+            toast({
+              variant: 'destructive',
+              title: 'Uh oh! Something went wrong.',
+              description: error.message || 'Could not create account.',
+            });
+            setLoading(false);
+        });
     } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Uh oh! Something went wrong.',
-        description: error.message || 'Could not create account.',
-      });
-      setLoading(false);
+        // This catch block might be redundant if the callback handles it, but good for safety.
+        toast({
+            variant: 'destructive',
+            title: 'Uh oh! Something went wrong.',
+            description: error.message || 'Could not create account.',
+        });
+        setLoading(false);
     }
   };
 
   const handleSignIn = () => {
     setLoading(true);
-    initiateEmailSignIn(auth, signinEmail, signinPassword);
-    // The useUser hook will redirect to /dashboard if successful
-    // A listener for sign-in failure could show a toast.
-    // For simplicity, we are not handling it here.
+    initiateEmailSignIn(auth, signinEmail, signinPassword,
+      async (userCredential) => {
+        // On success, check and create user doc if needed.
+        const user = userCredential.user;
+        const userRef = doc(firestore, 'users', user.uid);
+        const userDoc = await getDoc(userRef);
+
+        if (!userDoc.exists()) {
+          // This case handles users who signed up before this logic was in place
+          await setDoc(userRef, {
+            displayName: user.displayName || 'User', // Fallback display name
+            email: user.email,
+            role: 'student',
+            xp: 0,
+            streak: 0,
+          });
+        }
+      },
+      (error) => {
+        toast({
+          variant: 'destructive',
+          title: 'Sign-In Failed',
+          description: error.message || 'Invalid email or password.',
+        });
+        setLoading(false);
+      }
+    );
   };
   
   const handleGoogleSignIn = async () => {
