@@ -90,6 +90,8 @@ export function Combobox({
   )
 }
 
+const CREATE_OPTION_VALUE = "---create-new-topic---";
+
 export function CreatableCombobox({
   options,
   value,
@@ -102,7 +104,7 @@ export function CreatableCombobox({
   options: ComboboxOption[]
   value: string
   onChange: (value: string) => void
-  onCreate: (value: string) => void
+  onCreate: (value: string) => Promise<void>
   placeholder?: string
   emptyMessage?: string
   className?: string
@@ -111,13 +113,22 @@ export function CreatableCombobox({
   const [inputValue, setInputValue] = React.useState("")
   const selectedOption = options.find((option) => option.value === value)
 
-  const handleCreate = (newLabel: string) => {
+  const handleCreate = async (newLabel: string) => {
     const trimmedLabel = newLabel.trim()
     if (!trimmedLabel) return
 
+    const existingOption = options.find(
+      (option) => option.label.toLowerCase() === trimmedLabel.toLowerCase()
+    )
+
     setOpen(false)
     setInputValue("")
-    onCreate(trimmedLabel)
+
+    if (existingOption) {
+      onChange(existingOption.value)
+    } else {
+      await onCreate(trimmedLabel);
+    }
   }
 
   const filteredOptions = options.filter((option) =>
@@ -141,13 +152,11 @@ export function CreatableCombobox({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-        <Command
-          filter={(value, search) => {
-            if (showCreateOption) return 1;
-            if (value.toLowerCase().includes(search.toLowerCase())) return 1
-            return 0
-          }}
-        >
+        <Command filter={(value, search) => {
+            if (value === CREATE_OPTION_VALUE) return 1;
+            if (options.find(o => o.label === value)?.label.toLowerCase().includes(search.toLowerCase())) return 1;
+            return 0;
+          }}>
           <CommandInput
             placeholder={placeholder}
             value={inputValue}
@@ -160,7 +169,7 @@ export function CreatableCombobox({
             <CommandGroup>
               {showCreateOption && (
                 <CommandItem
-                  value={inputValue}
+                  value={CREATE_OPTION_VALUE}
                   onSelect={() => handleCreate(inputValue)}
                   className="flex items-center gap-2"
                 >
