@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { useDoc, useCollection, useMemoFirebase, useFirestore } from '@/firebase';
-import { doc, collection } from 'firebase/firestore';
+import { doc, collection, query, where } from 'firebase/firestore';
 
 
 export default function QuizPage() {
@@ -17,10 +17,10 @@ export default function QuizPage() {
   const firestore = useFirestore();
 
   const topicRef = useMemoFirebase(() => firestore && topicId ? doc(firestore, `courses/${courseId}/topics`, topicId) : null, [firestore, courseId, topicId]);
-  const questionsRef = useMemoFirebase(() => firestore && topicId ? collection(firestore, `courses/${courseId}/topics/${topicId}/questions`) : null, [firestore, courseId, topicId]);
+  const questionsQuery = useMemoFirebase(() => firestore && topicId ? query(collection(firestore, `courses/${courseId}/topics/${topicId}/questions`), where('status', '==', 'approved')) : null, [firestore, courseId, topicId]);
 
   const { data: topic, isLoading: isTopicLoading } = useDoc(topicRef);
-  const { data: questions, isLoading: areQuestionsLoading } = useCollection(questionsRef);
+  const { data: questions, isLoading: areQuestionsLoading } = useCollection(questionsQuery);
 
   if (!topicId) {
       notFound();
@@ -57,11 +57,11 @@ export default function QuizPage() {
 
       <div className="flex-grow flex items-center justify-center">
         {questions && questions.length > 0 ? (
-          <QuizComponent questions={questions} />
+          <QuizComponent questions={questions} topicName={topic.name} />
         ) : (
           <div className="text-center">
             <h2 className="text-xl font-semibold">No Quiz Available</h2>
-            <p className="text-muted-foreground">There are no questions for this topic yet.</p>
+            <p className="text-muted-foreground">There are no approved questions for this topic yet.</p>
           </div>
         )}
       </div>

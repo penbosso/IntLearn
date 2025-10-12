@@ -17,7 +17,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 
 type AnswerState = 'unanswered' | 'correct' | 'incorrect';
 
-export default function QuizComponent({ questions }: { questions: Question[] }) {
+export default function QuizComponent({ questions, topicName }: { questions: Question[], topicName: string }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [answerState, setAnswerState] = useState<AnswerState>('unanswered');
@@ -47,6 +47,7 @@ export default function QuizComponent({ questions }: { questions: Question[] }) 
             transaction.set(doc(quizAttemptRef), {
                 userId: user.uid,
                 quizId: topicId, // Using topicId as quizId for now
+                topicName: topicName,
                 score: percentage,
                 attemptedDate: serverTimestamp(),
                 correctAnswers: finalScore,
@@ -94,9 +95,10 @@ export default function QuizComponent({ questions }: { questions: Question[] }) 
 
     if (isLastQuestion) {
         setShowResults(true);
-        // We use the final score here directly
-        const finalScore = selectedAnswer === currentQuestion.answer ? score + 1 : score;
-        handleSaveResults(finalScore);
+        // We use the final score here directly, checking the last answer
+        const finalScore = (answerState === 'correct' || (answerState === 'unanswered' && selectedAnswer === currentQuestion.answer)) ? score : score - 1;
+        const finalCorrectScore = selectedAnswer === currentQuestion.answer ? score + 1 : score;
+        handleSaveResults(finalCorrectScore);
     } else {
         setCurrentIndex(currentIndex + 1);
         setSelectedAnswer(null);
@@ -112,6 +114,16 @@ export default function QuizComponent({ questions }: { questions: Question[] }) 
     setShowResults(false);
   };
   
+  useEffect(() => {
+    if (answerState !== 'unanswered') {
+      const timer = setTimeout(() => {
+        handleNextQuestion();
+      }, 1200); // Wait 1.2 seconds before moving to the next question
+      return () => clearTimeout(timer);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answerState]);
+
   if (showResults) {
     const percentage = Math.round((score / questions.length) * 100);
     return (
@@ -146,7 +158,17 @@ export default function QuizComponent({ questions }: { questions: Question[] }) 
         
         <RadioGroup
           value={selectedAnswer || undefined}
-          onValueChange={setSelectedAnswer}
+          onValueChange={(value) => {
+            setSelectedAnswer(value)
+            // Immediately check answer on selection
+            const isCorrect = value === currentQuestion.answer;
+            if (isCorrect) {
+              setScore(score + 1);
+              setAnswerState('correct');
+            } else {
+              setAnswerState('incorrect');
+            }
+          }}
           disabled={answerState !== 'unanswered'}
           className="space-y-4"
         >
@@ -180,19 +202,7 @@ export default function QuizComponent({ questions }: { questions: Question[] }) 
           })}
         </RadioGroup>
 
-        <div className="mt-8 flex justify-end">
-            {answerState === 'unanswered' ? (
-                 <Button onClick={handleCheckAnswer} disabled={!selectedAnswer}>Check Answer</Button>
-            ) : (
-                <Button onClick={handleNextQuestion}>
-                    {currentIndex === questions.length -1 ? 'Finish Quiz' : 'Next Question'}
-                    {currentIndex < questions.length - 1 && <ArrowRight className="ml-2 h-4 w-4" />}
-                </Button>
-            )}
-        </div>
       </CardContent>
     </Card>
   );
 }
-
-    

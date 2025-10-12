@@ -17,28 +17,55 @@ import {
 } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import PerformanceCharts from '@/components/performance-charts';
-import { Target, CheckCircle, BarChart, Trophy } from 'lucide-react';
+import { Target, CheckCircle, BarChart, Trophy, Loader2 } from 'lucide-react';
 import type { User } from '@/lib/auth';
-import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
+import type { QuizAttempt } from '@/lib/data';
+import { useCollection, useFirestore, useMemoFirebase, useUser } from '@/firebase';
 import { collection, query, where, orderBy } from 'firebase/firestore';
 import { useMemo } from 'react';
 
 export default function PerformancePage() {
     const firestore = useFirestore();
+    const { user } = useUser();
 
+    // Fetch leaderboard data
     const leaderboardQuery = useMemoFirebase(
       () =>
         firestore
           ? query(
               collection(firestore, 'users'),
               where('role', '==', 'student'),
-              orderBy('xp', 'desc')
+              orderBy('xp', 'desc'),
+              where('xp', '>', 0) // Only show users with XP
             )
           : null,
       [firestore]
     );
+    const { data: leaderboardData, isLoading: isLeaderboardLoading } = useCollection<User>(leaderboardQuery);
 
-    const { data: leaderboardData, isLoading } = useCollection<User>(leaderboardQuery);
+    // Fetch user's quiz attempts
+    const attemptsQuery = useMemoFirebase(
+      () => user ? query(collection(firestore, `users/${user.uid}/quizAttempts`), orderBy('attemptedDate', 'asc')) : null,
+      [firestore, user]
+    );
+    const { data: quizAttempts, isLoading: areAttemptsLoading } = useCollection<QuizAttempt>(attemptsQuery);
+    
+    // Calculate aggregate stats
+    const { overallAccuracy, quizzesTaken } = useMemo(() => {
+        if (!quizAttempts || quizAttempts.length === 0) {
+            return { overallAccuracy: 0, quizzesTaken: 0 };
+        }
+
+        const totalScore = quizAttempts.reduce((acc, attempt) => acc + attempt.score, 0);
+        const averageScore = totalScore / quizAttempts.length;
+
+        return {
+            overallAccuracy: Math.round(averageScore),
+            quizzesTaken: quizAttempts.length
+        };
+    }, [quizAttempts]);
+
+    const isLoading = isLeaderboardLoading || areAttemptsLoading;
 
   return (
     <div className="space-y-6">
@@ -51,8 +78,12 @@ export default function PerformancePage() {
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">82%</div>
-            <p className="text-xs text-muted-foreground">+2% from last week</p>
+            {areAttemptsLoading ? <Loader2 className="h-6 w-6 animate-spin" /> :
+              <>
+                <div className="text-2xl font-bold">{overallAccuracy}%</div>
+                <p className="text-xs text-muted-foreground">Average score across all quizzes</p>
+              </>
+            }
           </CardContent>
         </Card>
         <Card>
@@ -61,8 +92,8 @@ export default function PerformancePage() {
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">1,234</div>
-            <p className="text-xs text-muted-foreground">+50 this week</p>
+             <div className="text-2xl font-bold">...</div>
+            <p className="text-xs text-muted-foreground">Feature coming soon</p>
           </CardContent>
         </Card>
         <Card>
@@ -71,8 +102,12 @@ export default function PerformancePage() {
             <BarChart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">42</div>
-            <p className="text-xs text-muted-foreground">Highest score: 95%</p>
+             {areAttemptsLoading ? <Loader2 className="h-6 w-6 animate-spin" /> :
+              <>
+                <div className="text-2xl font-bold">{quizzesTaken}</div>
+                <p className="text-xs text-muted-foreground">Total quizzes completed</p>
+              </>
+            }
           </CardContent>
         </Card>
       </div>
@@ -81,11 +116,11 @@ export default function PerformancePage() {
         <CardHeader>
           <CardTitle>Progress Over Time</CardTitle>
           <CardDescription>
-            Your quiz accuracy and study activity over the last 30 days.
+            Your quiz scores and performance by topic.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <PerformanceCharts />
+          <PerformanceCharts quizAttempts={quizAttempts} isLoading={areAttemptsLoading} />
         </CardContent>
       </Card>
 
@@ -109,7 +144,7 @@ export default function PerformancePage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading && (
+              {isLeaderboardLoading && (
                  <TableRow><TableCell colSpan={3} className="text-center">Loading leaderboard...</TableCell></TableRow>
               )}
               {leaderboardData?.map((user, index) => (
@@ -130,8 +165,8 @@ export default function PerformancePage() {
                   <TableCell className="text-right font-bold text-lg">{user.xp.toLocaleString()}</TableCell>
                 </TableRow>
               ))}
-               {!isLoading && leaderboardData?.length === 0 && (
-                  <TableRow><TableCell colSpan={3} className="text-center">No students on the leaderboard yet.</TableCell></TableRow>
+               {!isLeaderboardLoading && leaderboardData?.length === 0 && (
+                  <TableRow><TableCell colSpan={3} className="text-center">No students with XP on the leaderboard yet.</TableCell></TableRow>
                )}
             </TableBody>
           </Table>

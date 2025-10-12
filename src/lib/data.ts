@@ -36,6 +36,7 @@ export type QuizAttempt = {
   id: string;
   userId: string;
   quizId: string; // This corresponds to a topicId
+  topicName: string;
   score: number;
   attemptedDate: any; // Firestore Timestamp
   correctAnswers: number;
