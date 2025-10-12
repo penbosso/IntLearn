@@ -102,7 +102,7 @@ export function CreatableCombobox({
   options: ComboboxOption[]
   value: string
   onChange: (value: string) => void
-  onCreate: (value: string) => Promise<void>
+  onCreate: (value: string) => void
   placeholder?: string
   emptyMessage?: string
   className?: string
@@ -111,13 +111,13 @@ export function CreatableCombobox({
   const [inputValue, setInputValue] = React.useState("")
   const selectedOption = options.find((option) => option.value === value)
 
-  const handleCreate = async (newLabel: string) => {
+  const handleCreate = (newLabel: string) => {
     const trimmedLabel = newLabel.trim()
     if (!trimmedLabel) return
 
     setOpen(false)
     setInputValue("")
-    await onCreate(trimmedLabel)
+    onCreate(trimmedLabel)
   }
 
   const filteredOptions = options.filter((option) =>
@@ -143,6 +143,7 @@ export function CreatableCombobox({
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
         <Command
           filter={(value, search) => {
+            if (showCreateOption) return 1;
             if (value.toLowerCase().includes(search.toLowerCase())) return 1
             return 0
           }}
