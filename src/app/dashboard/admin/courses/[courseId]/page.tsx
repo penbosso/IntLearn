@@ -62,7 +62,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { CreatableCombobox } from "@/components/ui/combobox";
 import { useToast } from '@/hooks/use-toast';
 import { generateFlashcardsAndQuestions } from '@/ai/flows/generate-flashcards-and-questions';
 import { getCurrentUser } from '@/lib/auth';
@@ -300,6 +299,97 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
   );
 }
 
+function AddTopicDialog({ courseId, adminId, onTopicAdded }: { courseId: string; adminId: string; onTopicAdded: () => void }) {
+  const { toast } = useToast();
+  const firestore = useFirestore();
+  const [loading, setLoading] = useState(false);
+  const [topicName, setTopicName] = useState('');
+  const [open, setOpen] = useState(false);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!topicName.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Topic Name Required',
+        description: 'Please provide a name for the new topic.',
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await addDoc(collection(firestore, `courses/${courseId}/topics`), {
+        name: topicName,
+        description: `New topic: ${topicName}`,
+        courseId: courseId,
+        adminId: adminId,
+        createdAt: serverTimestamp(),
+      });
+
+      setLoading(false);
+      toast({
+        title: 'Topic Created',
+        description: `Successfully created topic "${topicName}".`,
+      });
+      onTopicAdded(); // Callback to refetch topics
+      setOpen(false); // Close dialog
+      setTopicName(''); // Reset form
+    } catch (error: any) {
+      console.error('Failed to create topic:', error);
+      setLoading(false);
+      toast({
+        variant: 'destructive',
+        title: 'Uh oh! Something went wrong.',
+        description: error.message || 'Could not create topic.',
+      });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <PlusCircle className="mr-2 h-4 w-4" />
+          Add Topic
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[425px]">
+        <form onSubmit={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>Add New Topic</DialogTitle>
+            <DialogDescription>
+              Create a new topic to organize your course content.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-topic-name">New Topic Name</Label>
+              <Input
+                id="new-topic-name"
+                placeholder="e.g., Cellular Respiration"
+                required
+                value={topicName}
+                onChange={(e) => setTopicName(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="ghost">Cancel</Button>
+            </DialogClose>
+            <Button type="submit" disabled={loading}>
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {loading ? 'Creating...' : 'Create Topic'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
 function EditContentDialog({ item, topics, originalTopicId, courseId, type, children, onTopicChange }: { item: any, topics: any[], originalTopicId: string, courseId: string, type: 'flashcard' | 'question', children: React.ReactNode, onTopicChange: () => void }) {
     const { toast } = useToast();
     const firestore = useFirestore();
@@ -313,22 +403,6 @@ function EditContentDialog({ item, topics, originalTopicId, courseId, type, chil
         setContent(item);
         setSelectedTopicId(originalTopicId);
     }, [item, originalTopicId]);
-
-    const handleCreateTopic = async (topicName: string) => {
-      if (!firebaseUser) throw new Error("User not authenticated.");
-
-      const newTopicRef = await addDoc(collection(firestore, `courses/${courseId}/topics`), {
-          name: topicName,
-          description: `New topic: ${topicName}`,
-          courseId: courseId,
-          adminId: firebaseUser.uid,
-          createdAt: serverTimestamp(),
-      });
-      toast({ title: "Topic Created", description: `Successfully created "${topicName}".` });
-      
-      onTopicChange();
-      setSelectedTopicId(newTopicRef.id);
-  };
 
     const handleSave = async () => {
         setLoading(true);
@@ -380,8 +454,6 @@ function EditContentDialog({ item, topics, originalTopicId, courseId, type, chil
         }
     };
     
-    const topicOptions = useMemo(() => topics.map(t => ({ value: t.id, label: t.name })), [topics]);
-
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>{children}</DialogTrigger>
@@ -392,13 +464,16 @@ function EditContentDialog({ item, topics, originalTopicId, courseId, type, chil
                 <div className="py-4 space-y-4">
                      <div className="space-y-2">
                         <Label htmlFor="edit-topic">Topic</Label>
-                        <CreatableCombobox
-                            options={topicOptions}
-                            value={selectedTopicId}
-                            onChange={setSelectedTopicId}
-                            onCreate={handleCreateTopic}
-                            placeholder="Select or create a topic..."
-                        />
+                        <Select onValueChange={setSelectedTopicId} defaultValue={selectedTopicId}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select a topic" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {topics.map(t => (
+                                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
                     {type === 'flashcard' ? (
                         <>
@@ -582,22 +657,7 @@ export default function AdminCourseReviewPage() {
     const batch = writeBatch(firestore);
     
     let newTopicId = bulkActionTopic;
-
-    // Check if the topic exists or needs to be created
-    const existingTopic = topics?.find(t => t.id === bulkActionTopic || t.name === bulkActionTopic);
-    if (!existingTopic) {
-        const newTopicRef = doc(collection(firestore, `courses/${courseId}/topics`));
-        batch.set(newTopicRef, {
-            name: bulkActionTopic,
-            description: `New topic: ${bulkActionTopic}`,
-            courseId,
-            adminId: course?.adminId,
-            createdAt: serverTimestamp(),
-        });
-        newTopicId = newTopicRef.id;
-    } else {
-        newTopicId = existingTopic.id;
-    }
+    const existingTopic = topics?.find(t => t.id === bulkActionTopic);
 
     try {
         // We must read the documents first to move them
@@ -617,7 +677,7 @@ export default function AdminCourseReviewPage() {
 
         toast({
             title: 'Bulk Topic Change Successful',
-            description: `${selectedIds.length} items moved to topic "${existingTopic?.name || bulkActionTopic}".`,
+            description: `${selectedIds.length} items moved to topic "${existingTopic?.name}".`,
         });
         
         handleContentRefresh();
@@ -697,9 +757,9 @@ export default function AdminCourseReviewPage() {
        <Card>
         <CardHeader>
           <CardTitle>Topic Selection</CardTitle>
-          <CardDescription>Choose a topic to review its content.</CardDescription>
+          <CardDescription>Choose a topic to review its content, or create a new one.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex items-center gap-2">
             {areTopicsLoading ? (
                 <p>Loading topics...</p>
             ) : topics && topics.length > 0 ? (
@@ -714,8 +774,9 @@ export default function AdminCourseReviewPage() {
                     </SelectContent>
                 </Select>
             ) : (
-                <p className="text-muted-foreground">No topics found. Click "Add Content" to get started.</p>
+                <p className="text-muted-foreground">No topics found.</p>
             )}
+            {course && <AddTopicDialog courseId={courseId} adminId={course.adminId} onTopicAdded={handleContentRefresh} />}
         </CardContent>
       </Card>
 
@@ -957,26 +1018,19 @@ export default function AdminCourseReviewPage() {
         <DialogContent>
             <DialogHeader>
                 <DialogTitle>Change Topic for Selected Items</DialogTitle>
-                <DialogDescription>Select a new topic for the selected items, or create a new one.</DialogDescription>
+                <DialogDescription>Select a new topic for the selected items.</DialogDescription>
             </DialogHeader>
             <div className="py-4">
-                <CreatableCombobox
-                    options={topicOptions}
-                    value={bulkActionTopic}
-                    onChange={setBulkActionTopic}
-                    onCreate={async (newTopicName) => {
-                      const newTopicRef = await addDoc(collection(firestore, `courses/${courseId}/topics`), {
-                          name: newTopicName,
-                          description: `New topic: ${newTopicName}`,
-                          courseId,
-                          adminId: course?.adminId,
-                          createdAt: serverTimestamp(),
-                      });
-                      handleContentRefresh();
-                      setBulkActionTopic(newTopicRef.id);
-                  }}
-                    placeholder="Select or create a new topic..."
-                />
+               <Select onValueChange={setBulkActionTopic}>
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select a new topic" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {topics?.filter(t => t.id !== topicId).map(t => (
+                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
             </div>
             <DialogFooter>
                 <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
