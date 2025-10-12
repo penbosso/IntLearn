@@ -301,18 +301,20 @@ function CourseCard({ course, enroll = false }: CourseCardProps) {
   return (
     <Card className="overflow-hidden transition-all hover:shadow-lg hover:-translate-y-1 flex flex-col">
       <Link href={`/dashboard/courses/${course.id}`} className="block flex-grow">
-        <Image
-          src={course.imageUrl || 'https://picsum.photos/seed/placeholder/600/400'}
-          alt={course.name}
-          width={600}
-          height={400}
-          data-ai-hint={course.imageHint}
-          className="h-48 w-full object-cover"
-        />
-        <CardHeader>
+        <div className="relative">
+            <Image
+            src={course.imageUrl || 'https://picsum.photos/seed/placeholder/600/400'}
+            alt={course.name}
+            width={600}
+            height={400}
+            data-ai-hint={course.imageHint}
+            className="h-48 w-full object-cover"
+            />
+        </div>
+        <div className="flex flex-col flex-grow p-6">
             <CardTitle>{course.name}</CardTitle>
-            <CardDescription className="h-10">{course.description}</CardDescription>
-        </CardHeader>
+            <CardDescription className="h-10 mt-2 flex-grow">{course.description}</CardDescription>
+        </div>
       </Link>
       <CardContent className="mt-auto">
         {enroll ? (

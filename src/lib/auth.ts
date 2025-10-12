@@ -16,18 +16,6 @@ export type User = {
   lastActivityDate?: any; // Can be a Firestore Timestamp
 };
 
-// To test different roles, change the 'role' property here.
-// role: 'student' or role: 'admin'
-const mockUser: User = {
-  id: '1',
-  name: 'Alex Doe',
-  email: 'alex.doe@example.com',
-  role: 'student',
-  avatarUrl: 'https://i.pravatar.cc/150?u=alexdoe',
-  xp: 1250,
-  streak: 5,
-};
-
 export async function getCurrentUser(firebaseUser?: FirebaseUser | null): Promise<User> {
   if (firebaseUser) {
     const { firestore } = initializeFirebase();
@@ -38,7 +26,7 @@ export async function getCurrentUser(firebaseUser?: FirebaseUser | null): Promis
       const userData = userDoc.data();
       return {
         id: firebaseUser.uid,
-        name: userData.displayName || firebaseUser.displayName || 'Anonymous',
+        name: userData.displayName || firebaseUser.displayName || 'User',
         email: firebaseUser.email || '',
         avatarUrl: firebaseUser.photoURL || `https://i.pravatar.cc/150?u=${firebaseUser.uid}`,
         role: userData.role || 'student',
@@ -50,7 +38,7 @@ export async function getCurrentUser(firebaseUser?: FirebaseUser | null): Promis
       // Default user profile if not in DB
        return {
         id: firebaseUser.uid,
-        name: firebaseUser.displayName || 'Anonymous',
+        name: firebaseUser.displayName || 'User',
         email: firebaseUser.email || '',
         avatarUrl: `https://i.pravatar.cc/150?u=${firebaseUser.uid}`,
         role: 'student',
@@ -59,45 +47,15 @@ export async function getCurrentUser(firebaseUser?: FirebaseUser | null): Promis
       };
     }
   }
-
-  // Simulate an API call for logged-out user or for testing
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(mockUser);
-    }, 100);
-  });
-}
-
-// You can add more mock users for features like leaderboards
-export const mockUsers: User[] = [
-  mockUser,
-  {
-    id: '2',
-    name: 'Jane Smith',
-    email: 'jane.smith@example.com',
+  
+  // This should not be hit in a real scenario with auth guards
+  return {
+    id: 'mock-user',
+    name: 'User',
+    email: 'user@example.com',
     role: 'student',
-    avatarUrl: 'https://i.pravatar.cc/150?u=janesmith',
-    xp: 2300,
-    streak: 12,
-  },
-  {
-    id: '3',
-    name: 'Sam Wilson',
-    email: 'sam.wilson@example.com',
-    role: 'student',
-    avatarUrl: 'https://i.pravatar.cc/150?u=samwilson',
-    xp: 850,
-    streak: 2,
-  },
-  {
-    id: '99',
-    name: 'Dr. Evelyn Reed',
-    email: 'e.reed@example.com',
-    role: 'admin',
-    avatarUrl: 'https://i.pravatar.cc/150?u=dreed',
+    avatarUrl: '',
     xp: 0,
     streak: 0,
-  },
-];
-
-    
+  };
+}
