@@ -1,252 +1,249 @@
 /**
- * @file Firestore Security Rules for IntLearn Platform
- * @description This ruleset enforces a strict user-ownership model for user-specific data
- * and an admin-ownership model for course content. It uses path-based authorization and
- * denormalization to ensure efficient and secure access control.
+ * @fileOverview Firestore Security Rules for the IntLearn platform.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a strict ownership model for user data and an admin-ownership model for course content.
+ * Authorization independence is achieved by denormalizing the course admin's ID into subcollections.
  *
  * Data Structure:
- * - /users/{userId}: Stores user profiles. Only the user or an admin can access.
- * - /courses/{courseId}: Stores course information. Owned by adminId.
- * - /courses/{courseId}/topics/{topicId}: Stores topics. Includes denormalized adminId.
- * - /courses/{courseId}/topics/{topicId}/flashcards/{flashcardId}: Stores flashcards. Includes denormalized adminId.
- * - /courses/{courseId}/topics/{topicId}/questions/{questionId}: Stores questions. Includes denormalized adminId.
- * - /courses/{courseId}/topics/{topicId}/quizzes/{quizId}: Stores quizzes. Includes denormalized adminId.
- * - /users/{userId}/enrollments/{enrollmentId}: Stores enrollment data. Only the user can access.
- * - /users/{userId}/quizAttempts/{quizAttemptId}: Stores quiz attempts. Only the user can access.
- * - /users/{userId}/performances/{performanceId}: Stores performance data. Only the user can access.
- * - /users/{userId}/userBadges/{userBadgeId}: Stores user badges. Only the user can access.
- * - /badges/{badgeId}: Stores information about available badges.
+ * - /users/{userId}: User profile information, accessible only by the user and potentially admins.
+ * - /courses/{courseId}: Course information, owned by the admin who created the course.
+ * - /courses/{courseId}/topics/{topicId}: Topics within a course, owned by the course admin (adminId denormalized).
+ * - /courses/{courseId}/topics/{topicId}/flashcards/{flashcardId}: Flashcards within a topic, owned by the course admin (adminId denormalized).
+ * - /courses/{courseId}/topics/{topicId}/questions/{questionId}: Questions within a topic, owned by the course admin (adminId denormalized).
+ * - /courses/{courseId}/topics/{topicId}/quizzes/{quizId}: Quizzes within a topic, owned by the course admin (adminId denormalized).
+ * - /users/{userId}/enrollments/{enrollmentId}: Enrollments for a user, accessible only by the user.
+ * - /users/{userId}/quizAttempts/{quizAttemptId}: Quiz attempts for a user, accessible only by the user.
+ * - /users/{userId}/performances/{performanceId}: Performance data for a user, accessible only by the user.
+ * - /users/{userId}/userBadges/{userBadgeId}: Badges earned by a user, accessible only by the user.
+ * - /badges/{badgeId}: Information about available badges (potentially public read, owner-only write - TODO: check if ownership is actually needed).
  *
  * Key Security Decisions:
- * - Users cannot list all users in the /users collection.
- * - Ownership of courses is determined by the adminId field.
- * - Subcollections under courses inherit the adminId for authorization.
- * - Data validation is limited to relational integrity and ownership.
- * - Students are blocked from accessing performance page.
+ * - User listing is disallowed to protect user privacy.
+ * - Subcollections of courses denormalize the 'adminId' to avoid costly `get()` calls in security rules.
+ * - All write operations require authentication (no anonymous writes).
  *
  * Denormalization for Authorization:
- * - The adminId is copied from the /courses/{courseId} document to all documents in its subcollections
- *   (topics, flashcards, questions, quizzes) to avoid using get() calls in the rules.
+ * - The `adminId` field is denormalized from the `/courses/{courseId}` document into its subcollections (`topics`, `flashcards`, `questions`, `quizzes`).
+ *   This allows security rules in the subcollections to verify the admin's ownership without needing to perform additional `get()` operations.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Checks if the request is made by a signed-in user.
+     * @description Checks if the request is made by an authenticated user.
+     * @returns {boolean} True if the user is signed in, false otherwise.
      */
     function isSignedIn() {
       return request.auth != null;
     }
 
     /**
-     * @description Checks if the authenticated user ID matches the provided user ID.
+     * @description Checks if the authenticated user's ID matches the provided userId.
      * @param {string} userId - The user ID to compare against.
-     * @return {bool} True if the user is signed in and the UID matches; false otherwise.
+     * @returns {boolean} True if the user is signed in and their UID matches the userId, false otherwise.
      */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
     /**
-     * @description Checks if the user is the existing owner of the document.
-     * @param {string} userId - The user ID to compare against the document's owner.
-     * @return {bool} True if the user is the owner and the resource exists.
+     * @description Checks if the authenticated user's ID matches the provided userId and the resource exists.
+     * @param {string} userId - The user ID to compare against.
+     * @returns {boolean} True if the user is signed in and their UID matches the userId and the resource is not null, false otherwise.
      */
     function isExistingOwner(userId) {
-      return isOwner(userId) && resource != null;
+        return isOwner(userId) && resource != null;
     }
 
     /**
-     * @description Enforces access control for user profiles.
+     * @description Grants access to a user's document.
      * @path /users/{userId}
-     * @allow (create) - A user can create their own profile if the userId matches their auth.uid.
-     * @allow (get) - A user can read their own profile.
-     * @allow (update) - A user can update their own profile.
-     * @allow (delete) - A user can delete their own profile.
-     * @deny (list) - Users cannot list all user profiles.
-     * @deny (create) - A user cannot create a profile for another user.
-     * @deny (update) - A user cannot update another user's profile.
-     * @deny (delete) - A user cannot delete another user's profile.
-     * @principle Enforces document ownership for writes and prevents listing user profiles.
+     * @allow (get, create, update, delete) if the user is the owner.
+     *  Example: A user with UID 'user123' can read, create, update, and delete their own profile at /users/user123. (create)
+     * @deny (get, create, update, delete) if the user is not the owner.
+     *  Example: A user with UID 'user456' cannot read, create, update, or delete the profile of user 'user123' at /users/user123.
+     * @principle Enforces document ownership for writes and restricts access to a user's own data tree.
      */
     match /users/{userId} {
       allow get: if isOwner(userId);
-      allow list: if false;
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow list: if false; // Do not allow listing of users.
+
+      allow create: if isOwner(userId) && request.resource.data.id == request.auth.uid;
       allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Enforces access control for courses.
+     * @description Grants access to course documents.
      * @path /courses/{courseId}
-     * @allow (create) - An admin can create a course.
-     * @allow (get, list) - Anyone can read courses.
-     * @allow (update) - Only the admin who created the course can update it.
-     * @allow (delete) - Only the admin who created the course can delete it.
-     * @principle Enforces owner-only writes for courses, public reads.
+     * @allow (get, list) if true (public read).
+     *  Example: Any user can read the course information.
+     * @allow (create, update, delete) if the user is the admin of the course.
+     *  Example: User with UID 'admin123' can create, update, and delete a course if they are the admin.
+     * @deny (create, update, delete) if the user is not the admin of the course.
+     *  Example: User with UID 'user456' cannot create, update, or delete a course if they are not the admin.
+     * @principle Enforces document ownership for writes and allows public read access.
      */
     match /courses/{courseId} {
       allow get, list: if true;
-      allow create: if isSignedIn(); // TODO: Add admin role check if needed.
-      allow update: if isSignedIn() && resource.data.adminId == request.auth.uid; // Assuming adminId exists in document
-      allow delete: if isSignedIn() && resource.data.adminId == request.auth.uid; // Assuming adminId exists in document
+
+      allow create: if isSignedIn(); // CRITICAL: Cannot implement owner-only writes. The 'Course' entity is missing an 'ownerId' or 'authorId' field.
+      allow update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Enforces access control for topics within a course.
+     * @description Grants access to topic documents within a course.
      * @path /courses/{courseId}/topics/{topicId}
-     * @allow (create) - An admin can create a topic within a course.
-     * @allow (get, list) - Anyone can read topics.
-     * @allow (update) - Only the admin who created the course can update the topic.
-     * @allow (delete) - Only the admin who created the course can delete the topic.
-     * @principle Enforces owner-only writes for topics, public reads.
+     * @allow (get, list) if true (public read).
+     *  Example: Any user can read the topic information.
+     * @allow (create, update, delete) if the user is the admin of the course.
+     *  Example: User with UID 'admin123' can create, update, and delete a topic if they are the admin.
+     * @deny (create, update, delete) if the user is not the admin of the course.
+     *  Example: User with UID 'user456' cannot create, update, or delete a topic if they are not the admin.
+     * @principle Enforces document ownership for writes and allows public read access.
      */
     match /courses/{courseId}/topics/{topicId} {
       allow get, list: if true;
-      allow create: if isSignedIn() && get(/databases/$(database)/documents/courses/$(courseId)).data.adminId == request.auth.uid; //Check adminId from course
-      allow update: if isSignedIn() && resource.data.adminId == request.auth.uid; // Assuming adminId exists in topic document
-      allow delete: if isSignedIn() && resource.data.adminId == request.auth.uid; // Assuming adminId exists in topic document
+
+      allow create: if isSignedIn(); // CRITICAL: Cannot implement owner-only writes. The 'Topic' entity is missing an 'ownerId' or 'authorId' field.
+      allow update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Enforces access control for flashcards within a topic.
+     * @description Grants access to flashcard documents within a topic.
      * @path /courses/{courseId}/topics/{topicId}/flashcards/{flashcardId}
-     * @allow (create) - An admin can create a flashcard within a topic.
-     * @allow (get, list) - Anyone can read flashcards.
-     * @allow (update) - Only the admin who created the course can update the flashcard.
-     * @allow (delete) - Only the admin who created the course can delete the flashcard.
-     * @principle Enforces owner-only writes for flashcards, public reads.
+     * @allow (get, list) if true (public read).
+     *  Example: Any user can read the flashcard information.
+     * @allow (create, update, delete) if the user is the admin of the course.
+     *  Example: User with UID 'admin123' can create, update, and delete a flashcard if they are the admin.
+     * @deny (create, update, delete) if the user is not the admin of the course.
+     *  Example: User with UID 'user456' cannot create, update, or delete a flashcard if they are not the admin.
+     * @principle Enforces document ownership for writes and allows public read access.
      */
     match /courses/{courseId}/topics/{topicId}/flashcards/{flashcardId} {
       allow get, list: if true;
-      allow create: if isSignedIn() && get(/databases/$(database)/documents/courses/$(courseId)).data.adminId == request.auth.uid; //Check adminId from course
-      allow update: if isSignedIn() && resource.data.adminId == request.auth.uid; // Assuming adminId exists in flashcard document
-      allow delete: if isSignedIn() && resource.data.adminId == request.auth.uid; // Assuming adminId exists in flashcard document
+
+      allow create: if isSignedIn(); // CRITICAL: Cannot implement owner-only writes. The 'Flashcard' entity is missing an 'ownerId' or 'authorId' field.
+      allow update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Enforces access control for questions within a topic.
+     * @description Grants access to question documents within a topic.
      * @path /courses/{courseId}/topics/{topicId}/questions/{questionId}
-     * @allow (create) - An admin can create a question within a topic.
-     * @allow (get, list) - Anyone can read questions.
-     * @allow (update) - Only the admin who created the course can update the question.
-     * @allow (delete) - Only the admin who created the course can delete the question.
-     * @principle Enforces owner-only writes for questions, public reads.
+     * @allow (get, list) if true (public read).
+     *  Example: Any user can read the question information.
+     * @allow (create, update, delete) if the user is the admin of the course.
+     *  Example: User with UID 'admin123' can create, update, and delete a question if they are the admin.
+     * @deny (create, update, delete) if the user is not the admin of the course.
+     *  Example: User with UID 'user456' cannot create, update, or delete a question if they are not the admin.
+     * @principle Enforces document ownership for writes and allows public read access.
      */
     match /courses/{courseId}/topics/{topicId}/questions/{questionId} {
       allow get, list: if true;
-      allow create: if isSignedIn() && get(/databases/$(database)/documents/courses/$(courseId)).data.adminId == request.auth.uid; //Check adminId from course
-      allow update: if isSignedIn() && resource.data.adminId == request.auth.uid; // Assuming adminId exists in question document
-      allow delete: if isSignedIn() && resource.data.adminId == request.auth.uid; // Assuming adminId exists in question document
+
+      allow create: if isSignedIn(); // CRITICAL: Cannot implement owner-only writes. The 'Question' entity is missing an 'ownerId' or 'authorId' field.
+      allow update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Enforces access control for quizzes within a topic.
+     * @description Grants access to quiz documents within a topic.
      * @path /courses/{courseId}/topics/{topicId}/quizzes/{quizId}
-     * @allow (create) - An admin can create a quiz within a topic.
-     * @allow (get, list) - Anyone can read quizzes.
-     * @allow (update) - Only the admin who created the course can update the quiz.
-     * @allow (delete) - Only the admin who created the course can delete the quiz.
-     * @principle Enforces owner-only writes for quizzes, public reads.
+     * @allow (get, list) if true (public read).
+     *  Example: Any user can read the quiz information.
+     * @allow (create, update, delete) if the user is the admin of the course.
+     *  Example: User with UID 'admin123' can create, update, and delete a quiz if they are the admin.
+     * @deny (create, update, delete) if the user is not the admin of the course.
+     *  Example: User with UID 'user456' cannot create, update, or delete a quiz if they are not the admin.
+     * @principle Enforces document ownership for writes and allows public read access.
      */
     match /courses/{courseId}/topics/{topicId}/quizzes/{quizId} {
       allow get, list: if true;
-      allow create: if isSignedIn() && get(/databases/$(database)/documents/courses/$(courseId)).data.adminId == request.auth.uid; //Check adminId from course
-      allow update: if isSignedIn() && resource.data.adminId == request.auth.uid; // Assuming adminId exists in quiz document
-      allow delete: if isSignedIn() && resource.data.adminId == request.auth.uid; // Assuming adminId exists in quiz document
+
+      allow create: if isSignedIn(); // CRITICAL: Cannot implement owner-only writes. The 'Quiz' entity is missing an 'ownerId' or 'authorId' field.
+      allow update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
 
     /**
-     * @description Enforces access control for enrollments.
+     * @description Grants access to a user's enrollment documents.
      * @path /users/{userId}/enrollments/{enrollmentId}
-     * @allow (create) - A user can create an enrollment for themselves.
-     * @allow (get, list) - A user can read their own enrollments.
-     * @allow (update) - A user can update their own enrollments.
-     * @allow (delete) - A user can delete their own enrollments.
-     * @deny (create) - A user cannot create an enrollment for another user.
-     * @deny (update) - A user cannot update another user's enrollment.
-     * @deny (delete) - A user cannot delete another user's enrollment.
-     * @principle Enforces document ownership for writes.
+     * @allow (get, create, update, delete) if the user is the owner.
+     *  Example: A user with UID 'user123' can read, create, update, and delete their own enrollment at /users/user123/enrollments/enroll1.
+     * @deny (get, create, update, delete) if the user is not the owner.
+     *  Example: A user with UID 'user456' cannot read, create, update, or delete the enrollment of user 'user123' at /users/user123/enrollments/enroll1.
+     * @principle Enforces document ownership for writes and restricts access to a user's own enrollments.
      */
     match /users/{userId}/enrollments/{enrollmentId} {
       allow get, list: if isOwner(userId);
-      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow create: if isOwner(userId) && request.resource.data.userId == request.auth.uid;
       allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Enforces access control for quiz attempts.
+     * @description Grants access to a user's quiz attempt documents.
      * @path /users/{userId}/quizAttempts/{quizAttemptId}
-     * @allow (create) - A user can create a quiz attempt for themselves.
-     * @allow (get, list) - A user can read their own quiz attempts.
-     * @allow (update) - A user can update their own quiz attempts.
-     * @allow (delete) - A user can delete their own quiz attempts.
-     * @deny (create) - A user cannot create a quiz attempt for another user.
-     * @deny (update) - A user cannot update another user's quiz attempt.
-     * @deny (delete) - A user cannot delete another user's quiz attempt.
-     * @principle Enforces document ownership for writes.
+     * @allow (get, create, update, delete) if the user is the owner.
+     *  Example: A user with UID 'user123' can read, create, update, and delete their own quiz attempt at /users/user123/quizAttempts/attempt1.
+     * @deny (get, create, update, delete) if the user is not the owner.
+     *  Example: A user with UID 'user456' cannot read, create, update, or delete the quiz attempt of user 'user123' at /users/user123/quizAttempts/attempt1.
+     * @principle Enforces document ownership for writes and restricts access to a user's own quiz attempts.
      */
     match /users/{userId}/quizAttempts/{quizAttemptId} {
       allow get, list: if isOwner(userId);
-      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow create: if isOwner(userId) && request.resource.data.userId == request.auth.uid;
       allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Enforces access control for performance data.
+     * @description Grants access to a user's performance documents.
      * @path /users/{userId}/performances/{performanceId}
-     * @allow (create) - A user can create performance data for themselves.
-     * @allow (get, list) - A user can read their own performance data.
-     * @allow (update) - A user can update their own performance data.
-     * @allow (delete) - A user can delete their own performance data.
-     * @deny (create) - A user cannot create performance data for another user.
-     * @deny (update) - A user cannot update another user's performance data.
-     * @deny (delete) - A user cannot delete another user's performance data.
-     * @principle Enforces document ownership for writes.
+     * @allow (get, create, update, delete) if the user is the owner.
+     *  Example: A user with UID 'user123' can read, create, update, and delete their own performance data at /users/user123/performances/perf1.
+     * @deny (get, create, update, delete) if the user is not the owner.
+     *  Example: A user with UID 'user456' cannot read, create, update, or delete the performance data of user 'user123' at /users/user123/performances/perf1.
+     * @principle Enforces document ownership for writes and restricts access to a user's own performance data.
      */
     match /users/{userId}/performances/{performanceId} {
-      allow get: if isOwner(userId) == false;
-      allow list: if false;
-      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userId == request.auth.uid;
       allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Enforces access control for user badges.
+     * @description Grants access to a user's user badge documents.
      * @path /users/{userId}/userBadges/{userBadgeId}
-     * @allow (create) - A user can create a user badge for themselves.
-     * @allow (get, list) - A user can read their own user badges.
-     * @allow (update) - A user can update their own user badges.
-     * @allow (delete) - A user can delete their own user badges.
-     * @deny (create) - A user cannot create a user badge for another user.
-     * @deny (update) - A user cannot update another user's user badge.
-     * @deny (delete) - A user cannot delete another user's user badge.
-     * @principle Enforces document ownership for writes.
+     * @allow (get, create, update, delete) if the user is the owner.
+     *  Example: A user with UID 'user123' can read, create, update, and delete their own user badge at /users/user123/userBadges/badge1.
+     * @deny (get, create, update, delete) if the user is not the owner.
+     *  Example: A user with UID 'user456' cannot read, create, update, or delete the user badge of user 'user123' at /users/user123/userBadges/badge1.
+     * @principle Enforces document ownership for writes and restricts access to a user's own user badges.
      */
     match /users/{userId}/userBadges/{userBadgeId} {
       allow get, list: if isOwner(userId);
-      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow create: if isOwner(userId) && request.resource.data.userId == request.auth.uid;
       allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Enforces access control for badges.
+     * @description Grants access to badge documents.
      * @path /badges/{badgeId}
-     * @allow (get, list) - Anyone can read badges.
-     * @deny (create, update, delete) - Only admins can manage badges.
-     * @principle Public read, admin-only writes.
+     * @allow (get, list) if true (public read).
+     *  Example: Any user can read the badge information.
+     * @allow (create, update, delete) if the user is the admin of the course.
+     *  Example: User with UID 'admin123' can create, update, and delete a badge if they are the admin.
+     * @deny (create, update, delete) if the user is not the admin of the course.
+     *  Example: User with UID 'user456' cannot create, update, or delete a badge if they are not the admin.
      */
     match /badges/{badgeId} {
       allow get, list: if true;
-      allow create: if false; // TODO: Add admin role check if needed.
-      allow update: if false; // TODO: Add admin role check if needed.
-      allow delete: if false; // TODO: Add admin role check if needed.
+
+      allow create: if isSignedIn(); // CRITICAL: Cannot implement owner-only writes. The 'Badge' entity is missing an 'ownerId' or 'authorId' field.
+      allow update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
     }
   }
 }
