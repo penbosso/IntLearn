@@ -306,7 +306,7 @@ export default function AuthPage() {
                       required
                       className="pl-10"
                       value={signupEmail}
-                      onChange={(e) => setSignupEmail(e.targe.value)}
+                      onChange={(e) => setSignupEmail(e.target.value)}
                     />
                   </div>
                 </div>
