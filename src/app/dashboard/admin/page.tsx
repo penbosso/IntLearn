@@ -17,10 +17,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { PlusCircle, Users, BarChart, BookOpen } from 'lucide-react';
-import type { Course } from '@/lib/data';
+import { PlusCircle, Users, BarChart, BookOpen, Loader2 } from 'lucide-react';
+import type { Course, QuizAttempt } from '@/lib/data';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, where } from 'firebase/firestore';
+import { collection, query, where, collectionGroup } from 'firebase/firestore';
 import { useUser } from '@/firebase';
 
 
@@ -33,7 +33,20 @@ export default function AdminDashboardPage() {
     [user, firestore]
   );
   
-  const { data: courses, isLoading } = useCollection<Course>(coursesQuery);
+  const { data: courses, isLoading: areCoursesLoading } = useCollection<Course>(coursesQuery);
+
+  const studentsQuery = useMemoFirebase(
+    () => firestore ? query(collection(firestore, 'users'), where('role', '==', 'student')) : null,
+    [firestore]
+  );
+  const { data: students, isLoading: areStudentsLoading } = useCollection(studentsQuery);
+
+  const allAttemptsQuery = useMemoFirebase(
+    () => firestore ? query(collectionGroup(firestore, 'quizAttempts')) : null,
+    [firestore]
+  );
+  const { data: allAttempts, isLoading: areAttemptsLoading } = useCollection<QuizAttempt>(allAttemptsQuery);
+
 
   const getStatusBadge = (status?: string) => {
     switch (status) {
@@ -45,6 +58,8 @@ export default function AdminDashboardPage() {
         return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
     }
   };
+
+  const isLoading = areCoursesLoading || areStudentsLoading || areAttemptsLoading;
 
   return (
     <div className="space-y-6">
@@ -68,18 +83,26 @@ export default function AdminDashboardPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">1,284</div>
-            <p className="text-xs text-muted-foreground">+50 this month</p>
+            {areStudentsLoading ? <Loader2 className="h-6 w-6 animate-spin"/> :
+                <>
+                    <div className="text-2xl font-bold">{students?.length || 0}</div>
+                    <p className="text-xs text-muted-foreground">students have enrolled</p>
+                </>
+            }
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Courses</CardTitle>
+            <CardTitle className="text-sm font-medium">Your Courses</CardTitle>
             <BookOpen className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{courses?.length || 0}</div>
-            <p className="text-xs text-muted-foreground">{courses?.filter(c => c.status === 'draft').length} courses awaiting review</p>
+             {areCoursesLoading ? <Loader2 className="h-6 w-6 animate-spin"/> :
+                <>
+                    <div className="text-2xl font-bold">{courses?.length || 0}</div>
+                    <p className="text-xs text-muted-foreground">{courses?.filter(c => c.status === 'draft').length} courses awaiting review</p>
+                </>
+            }
           </CardContent>
         </Card>
         <Card>
@@ -88,8 +111,12 @@ export default function AdminDashboardPage() {
             <BarChart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">78%</div>
-            <p className="text-xs text-muted-foreground">Average quiz completion rate</p>
+            {areAttemptsLoading ? <Loader2 className="h-6 w-6 animate-spin"/> :
+                <>
+                    <div className="text-2xl font-bold">{allAttempts?.length || 0}</div>
+                    <p className="text-xs text-muted-foreground">Total quiz attempts across all courses</p>
+                </>
+            }
           </CardContent>
         </Card>
       </div>
@@ -111,8 +138,8 @@ export default function AdminDashboardPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading && <TableRow><TableCell colSpan={3} className="text-center">Loading courses...</TableCell></TableRow>}
-              {!isLoading && courses && courses.map((course: Course) => (
+              {areCoursesLoading && <TableRow><TableCell colSpan={3} className="text-center">Loading courses...</TableCell></TableRow>}
+              {!areCoursesLoading && courses && courses.map((course: Course) => (
                 <TableRow key={course.id}>
                   <TableCell className="font-medium">{course.name}</TableCell>
                   <TableCell>
@@ -127,7 +154,7 @@ export default function AdminDashboardPage() {
                   </TableCell>
                 </TableRow>
               ))}
-               {!isLoading && (!courses || courses.length === 0) && (
+               {!areCoursesLoading && (!courses || courses.length === 0) && (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center">You haven't created any courses yet.</TableCell>
                 </TableRow>
