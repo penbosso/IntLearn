@@ -48,7 +48,7 @@ export default function AdminStudentsPage() {
         <CardHeader>
           <CardTitle>All Students</CardTitle>
           <CardDescription>
-            A list of all students enrolled on the platform.
+            A list of all students enrolled on the platform, ranked by XP.
           </CardDescription>
         </CardHeader>
         <CardContent>

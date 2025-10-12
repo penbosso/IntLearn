@@ -79,7 +79,7 @@ export default function AdminDashboardPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-start">
         <div>
-            <h1 className="text-3xl font-bold font-headline">Welcome, {user.name.split(' ')[0]}!</h1>
+            <h1 className="text-3xl font-bold font-headline">Welcome, {user?.name.split(' ')[0]}!</h1>
             <p className="text-muted-foreground">Manage courses, content, and student progress.</p>
         </div>
         <Button asChild>
