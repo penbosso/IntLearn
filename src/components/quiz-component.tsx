@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { Check, X, Repeat, ArrowRight, Trophy } from 'lucide-react';
+import { Check, X, Repeat, ArrowRight, Trophy, SkipForward } from 'lucide-react';
 import { useFirestore, useUser } from '@/firebase';
 import { addDoc, collection, serverTimestamp, doc, runTransaction, updateDoc, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -19,12 +20,14 @@ import { awardBadges } from '@/lib/badges/badge-engine';
 
 type AnswerState = 'unanswered' | 'correct' | 'incorrect';
 
-export default function QuizComponent({ questions, topicName }: { questions: Question[], topicName: string }) {
+export default function QuizComponent({ questions: initialQuestions, topicName }: { questions: Question[], topicName: string }) {
+  const [questions, setQuestions] = useState(initialQuestions);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [answerState, setAnswerState] = useState<AnswerState>('unanswered');
   const [score, setScore] = useState(0);
   const [showResults, setShowResults] = useState(false);
+  const [shortAnswerText, setShortAnswerText] = useState('');
   
   const firestore = useFirestore();
   const { user } = useUser();
@@ -140,9 +143,10 @@ export default function QuizComponent({ questions, topicName }: { questions: Que
 
 
   const handleCheckAnswer = () => {
-    if (!selectedAnswer) return;
+    const answerToCheck = currentQuestion.type === 'Short Answer' ? shortAnswerText : selectedAnswer;
+    if (!answerToCheck) return;
 
-    const isCorrect = selectedAnswer === currentQuestion.answer;
+    const isCorrect = answerToCheck.trim().toLowerCase() === currentQuestion.answer.trim().toLowerCase();
     if (isCorrect) {
       setScore(score + 1);
       setAnswerState('correct');
@@ -156,22 +160,31 @@ export default function QuizComponent({ questions, topicName }: { questions: Que
 
     if (isLastQuestion) {
         setShowResults(true);
-        // We use the final score here directly, checking the last answer
-        const finalCorrectScore = selectedAnswer === currentQuestion.answer ? score + 1 : score;
-        handleSaveResults(finalCorrectScore);
+        handleSaveResults(score);
     } else {
         setCurrentIndex(currentIndex + 1);
         setSelectedAnswer(null);
         setAnswerState('unanswered');
+        setShortAnswerText('');
     }
   };
 
+  const handleSkip = () => {
+    const questionToSkip = questions[currentIndex];
+    setQuestions([...questions.slice(0, currentIndex), ...questions.slice(currentIndex + 1), questionToSkip]);
+    setSelectedAnswer(null);
+    setAnswerState('unanswered');
+    setShortAnswerText('');
+  }
+
   const handleRestart = () => {
+    setQuestions(initialQuestions);
     setCurrentIndex(0);
     setSelectedAnswer(null);
     setAnswerState('unanswered');
     setScore(0);
     setShowResults(false);
+    setShortAnswerText('');
   };
   
   useEffect(() => {
@@ -203,6 +216,7 @@ export default function QuizComponent({ questions, topicName }: { questions: Que
 
   const options = currentQuestion.options?.length > 0 ? currentQuestion.options : (currentQuestion.type === 'True/False' ? ['True', 'False'] : []);
 
+  const canSubmit = selectedAnswer !== null || (currentQuestion.type === 'Short Answer' && shortAnswerText.trim() !== '');
 
   return (
     <Card className="w-full max-w-2xl">
@@ -216,52 +230,75 @@ export default function QuizComponent({ questions, topicName }: { questions: Que
       <CardContent>
         <p className="text-lg font-semibold mb-6 min-h-[3em]">{currentQuestion.text}</p>
         
-        <RadioGroup
-          value={selectedAnswer || undefined}
-          onValueChange={(value) => {
-            if (answerState !== 'unanswered') return;
-            setSelectedAnswer(value)
-            // Immediately check answer on selection
-            const isCorrect = value === currentQuestion.answer;
-            if (isCorrect) {
-              setScore(score + 1);
-              setAnswerState('correct');
-            } else {
-              setAnswerState('incorrect');
-            }
-          }}
-          disabled={answerState !== 'unanswered'}
-          className="space-y-4"
-        >
-          {options.map((option, index) => {
-             const isSelected = selectedAnswer === option;
-             const isCorrect = currentQuestion.answer === option;
-             let state: AnswerState = 'unanswered';
-             if (answerState !== 'unanswered' && isSelected) {
-                state = isCorrect ? 'correct' : 'incorrect';
-             } else if (answerState !== 'unanswered' && isCorrect) {
-                state = 'correct';
-             }
+        {currentQuestion.type === 'Short Answer' ? (
+          <Input 
+            value={shortAnswerText}
+            onChange={(e) => setShortAnswerText(e.target.value)}
+            placeholder="Type your answer here..."
+            disabled={answerState !== 'unanswered'}
+          />
+        ) : (
+          <RadioGroup
+            value={selectedAnswer || undefined}
+            onValueChange={(value) => {
+              if (answerState === 'unanswered') {
+                setSelectedAnswer(value);
+              }
+            }}
+            disabled={answerState !== 'unanswered'}
+            className="space-y-4"
+          >
+            {options.map((option, index) => {
+              const isSelected = selectedAnswer === option;
+              const isCorrect = currentQuestion.answer === option;
+              let itemState: 'unanswered' | 'correct' | 'incorrect' | 'reveal' = 'unanswered';
+              
+              if(answerState !== 'unanswered') {
+                if(isCorrect) itemState = 'correct';
+                else if (isSelected && !isCorrect) itemState = 'incorrect';
+              }
 
-            return (
-              <Label
-                key={index}
-                className={cn(
-                  "flex items-center p-4 rounded-lg border-2 cursor-pointer transition-all",
-                  state === 'unanswered' && "border-border hover:border-primary",
-                  state === 'correct' && "border-green-500 bg-green-500/10",
-                  state === 'incorrect' && "border-red-500 bg-red-500/10",
-                  isSelected && answerState === 'unanswered' && "border-primary"
-                )}
-              >
-                <RadioGroupItem value={option} id={`option-${index}`} className="mr-4" />
-                <span>{option}</span>
-                {state === 'correct' && <Check className="ml-auto h-5 w-5 text-green-500" />}
-                {state === 'incorrect' && <X className="ml-auto h-5 w-5 text-red-500" />}
-              </Label>
-            );
-          })}
-        </RadioGroup>
+              return (
+                <Label
+                  key={index}
+                  className={cn(
+                    "flex items-center p-4 rounded-lg border-2 cursor-pointer transition-all",
+                    answerState === 'unanswered' && "border-border hover:border-primary",
+                    isSelected && answerState === 'unanswered' && "border-primary",
+                    itemState === 'correct' && "border-green-500 bg-green-500/10",
+                    itemState === 'incorrect' && "border-red-500 bg-red-500/10"
+                  )}
+                >
+                  <RadioGroupItem value={option} id={`option-${index}`} className="mr-4" />
+                  <span>{option}</span>
+                  {itemState === 'correct' && <Check className="ml-auto h-5 w-5 text-green-500" />}
+                  {itemState === 'incorrect' && <X className="ml-auto h-5 w-5 text-red-500" />}
+                </Label>
+              );
+            })}
+          </RadioGroup>
+        )}
+
+        {answerState === 'unanswered' && (
+            <div className="flex gap-4 mt-6">
+                <Button 
+                    onClick={handleCheckAnswer}
+                    disabled={!canSubmit}
+                    className="w-full"
+                >
+                    <Check className="mr-2 h-4 w-4"/>
+                    Submit
+                </Button>
+                <Button 
+                    variant="outline" 
+                    onClick={handleSkip} 
+                    className="w-full"
+                >
+                    <SkipForward className="mr-2 h-4 w-4" />
+                    Skip
+                </Button>
+            </div>
+        )}
 
       </CardContent>
     </Card>
