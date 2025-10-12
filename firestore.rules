@@ -1,416 +1,225 @@
 /**
- * @file Firebase Security Rules for IntLearn Platform
+ * @fileoverview Firestore Security Rules for the IntLearn application.
  *
  * Core Philosophy:
  * This ruleset enforces a strict user-ownership model for personal data and an admin-ownership model for course content.
- * Authorization independence is achieved by denormalizing the `adminId` from courses to their subcollections (topics, flashcards, questions, quizzes).
- * This eliminates the need for expensive `get()` operations in security rules.
+ * Authorization independence is achieved by denormalizing the adminId into subcollections of courses.
  *
  * Data Structure:
- * - /users/{userId}: Stores user profiles. Only the user can read/write their own profile.
- * - /courses/{courseId}: Stores course information. Only the course admin can read/write.
- * - /courses/{courseId}/topics/{topicId}: Stores topics. Admin ownership enforced via denormalized adminId.
- * - /courses/{courseId}/topics/{topicId}/flashcards/{flashcardId}: Stores flashcards. Admin ownership enforced via denormalized adminId.
- * - /courses/{courseId}/topics/{topicId}/questions/{questionId}: Stores questions. Admin ownership enforced via denormalized adminId.
- * - /courses/{courseId}/topics/{topicId}/quizzes/{quizId}: Stores quizzes. Admin ownership enforced via denormalized adminId.
- * - /users/{userId}/enrollments/{enrollmentId}: Stores user enrollments. Only the user can access their own enrollments.
- * - /users/{userId}/quizAttempts/{quizAttemptsId}: Stores quiz attempts. Only the user can access their own attempts.
- * - /users/{userId}/performances/{performanceId}: Stores performance data. Only the user can access their own performance data.
- * - /users/{userId}/userBadges/{userBadgeId}: Stores user badges. Only the user can access their own badges.
- * - /badges/{badgeId}: Stores information about available badges. Publicly readable, admin-only writeable.
+ * - /users/{userId}: Stores user profile information.
+ * - /courses/{courseId}: Stores course information.
+ * - /courses/{courseId}/topics/{topicId}: Stores topics for a specific course.
+ * - /courses/{courseId}/topics/{topicId}/flashcards/{flashcardId}: Stores flashcards for a specific topic.
+ * - /courses/{courseId}/topics/{topicId}/questions/{questionId}: Stores questions for a specific topic.
+ * - /courses/{courseId}/topics/{topicId}/quizzes/{quizId}: Stores quizzes for a specific topic.
+ * - /users/{userId}/enrollments/{enrollmentId}: Stores enrollment information for a user.
+ * - /users/{userId}/quizAttempts/{quizAttemptId}: Stores quiz attempts for a user.
+ * - /users/{userId}/performances/{performanceId}: Stores performance data for a user.
+ * - /users/{userId}/userBadges/{userBadgeId}: Stores badges earned by a user.
+ * - /badges/{badgeId}: Stores information about available badges.
  *
  * Key Security Decisions:
- * - Users cannot list all users (to protect privacy).
- * - Admin ownership of courses is enforced and propagated to subcollections through denormalization.
- * - Data validation is limited to authorization-critical fields (e.g., userId, adminId) to enable rapid prototyping.
- * - All write operations check for document existence to prevent accidental modifications.
+ * - Users can only access their own data under the /users/{userId} path.
+ * - Course content can only be created/modified by the admin who created the course.  This ownership is enforced via a denormalized adminId field in subcollections.
+ * - Listing all users is disallowed.
+ *
+ * Denormalization for Authorization:
+ * - The 'adminId' from the /courses/{courseId} document is copied into each document within its subcollections (topics, flashcards, questions, quizzes).
+ *   This allows rules within the subcollections to quickly verify course ownership without needing to perform additional reads.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Manages user profile data.
+     * @description Checks if the user is signed in.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Checks if the authenticated user's ID matches the provided userId.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * @description Checks if the authenticated user's ID matches the provided userId and the resource exists.
+     */
+    function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * @description Allows the owner to create their own user document.
      * @path /users/{userId}
-     * @allow (create) User with ID 'user123' can create their own profile.
-     *     - Auth: {uid: 'user123'}
-     *     - Request Data: {id: 'user123', email: 'test@example.com', displayName: 'Test User', role: 'student'}
-     * @allow (get) User with ID 'user123' can read their own profile.
-     *     - Auth: {uid: 'user123'}
-     * @allow (update) User with ID 'user123' can update their own profile.
-     *     - Auth: {uid: 'user123'}
-     * @allow (delete) User with ID 'user123' can delete their own profile.
-     *     - Auth: {uid: 'user123'}
-     * @deny (create) User with ID 'user456' cannot create a profile for user 'user123'.
-     *     - Auth: {uid: 'user456'}
-     *     - Request Data: {id: 'user123', email: 'test@example.com', displayName: 'Test User', role: 'student'}
+     * @allow (create) - User with UID 'user123' creates /users/user123 document.
+     * @deny (create) - User with UID 'user123' creates /users/otherUser document.
      * @principle Enforces document ownership for writes.
      */
     match /users/{userId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
+      allow get: if false;
+      allow list: if false;
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
 
-      function isOwner(userId) {
-        return request.auth.uid == userId;
-      }
+    /**
+     * @description Allows access to course information, owned by the adminId.
+     * @path /courses/{courseId}
+     * @allow (get, list) Anyone can read the course, only the owner can modify.
+     * @deny (update) - User who is not the owner tries to update the course.
+     * @principle Enforces document ownership for writes.
+     */
+    match /courses/{courseId} {
+      allow get, list: if true;
+      allow create: if isSignedIn(); // TODO: Add role-based creation or other access control
+      allow update: if isSignedIn() && resource.data.adminId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.adminId == request.auth.uid && resource != null;
+    }
 
-      function isExistingOwner(userId) {
-        return isOwner(userId) && resource.data.id == userId;
-      }
+    /**
+     * @description Allows access to topics for a specific course. Includes denormalized 'adminId' from the parent course for authorization independence.
+     * @path /courses/{courseId}/topics/{topicId}
+     * @allow (get, list) Anyone can read topics for the course, only the owner can modify.
+     * @deny (update) - User who is not the owner tries to update the topic.
+     * @principle Enforces document ownership for writes.
+     */
+    match /courses/{courseId}/topics/{topicId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && get(/databases/$(database)/documents/courses/$(courseId)).data.adminId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.adminId == request.auth.uid && resource != null;
+      allow delete: if isSignedIn() && resource.data.adminId == request.auth.uid && resource != null;
+    }
 
-      allow get: if isOwner(userId);
-      allow list: if false; // Users should not be able to list all users.
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == userId;
+    /**
+     * @description Allows access to flashcards for a specific topic. Includes denormalized 'adminId' from the parent course for authorization independence.
+     * @path /courses/{courseId}/topics/{topicId}/flashcards/{flashcardId}
+     * @allow (get, list) Anyone can read flashcards for the topic, only the owner can modify.
+     * @deny (update) - User who is not the owner tries to update the flashcard.
+     * @principle Enforces document ownership for writes.
+     */
+    match /courses/{courseId}/topics/{topicId}/flashcards/{flashcardId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && get(/databases/$(database)/documents/courses/$(courseId)).data.adminId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.adminId == request.auth.uid && resource != null;
+      allow delete: if isSignedIn() && resource.data.adminId == request.auth.uid && resource != null;
+    }
+
+    /**
+     * @description Allows access to questions for a specific topic. Includes denormalized 'adminId' from the parent course for authorization independence.
+     * @path /courses/{courseId}/topics/{topicId}/questions/{questionId}
+     * @allow (get, list) Anyone can read questions for the topic, only the owner can modify.
+     * @deny (update) - User who is not the owner tries to update the question.
+     * @principle Enforces document ownership for writes.
+     */
+    match /courses/{courseId}/topics/{topicId}/questions/{questionId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && get(/databases/$(database)/documents/courses/$(courseId)).data.adminId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.adminId == request.auth.uid && resource != null;
+      allow delete: if isSignedIn() && resource.data.adminId == request.auth.uid && resource != null;
+    }
+
+    /**
+     * @description Allows access to quizzes for a specific topic. Includes denormalized 'adminId' from the parent course for authorization independence.
+     * @path /courses/{courseId}/topics/{topicId}/quizzes/{quizId}
+     * @allow (get, list) Anyone can read quizzes for the topic, only the owner can modify.
+     * @deny (update) - User who is not the owner tries to update the quiz.
+     * @principle Enforces document ownership for writes.
+     */
+    match /courses/{courseId}/topics/{topicId}/quizzes/{quizId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && get(/databases/$(database)/documents/courses/$(courseId)).data.adminId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.adminId == request.auth.uid && resource != null;
+      allow delete: if isSignedIn() && resource.data.adminId == request.auth.uid && resource != null;
+    }
+
+    /**
+     * @description Allows access to enrollment information for a user. Path-based ownership ensures only the user can access their enrollments.
+     * @path /users/{userId}/enrollments/{enrollmentId}
+     * @allow (get, list) The user can read their own enrollments.
+     * @deny (create, update, delete) Another user attempts to modify this enrollment.
+     * @principle Enforces document ownership for reads and writes.
+     */
+    match /users/{userId}/enrollments/{enrollmentId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId);
       allow update: if isExistingOwner(userId);
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Manages course data.
-     * @path /courses/{courseId}
-     * @allow (create) Admin with ID 'admin123' can create a course.
-     *     - Auth: {uid: 'admin123'}
-     *     - Request Data: {id: 'course123', name: 'Test Course', description: 'A test course', adminId: 'admin123'}
-     * @allow (get) Any signed-in user can read a course.
-     *     - Auth: {uid: 'user123'}
-     * @allow (update) Admin with ID 'admin123' can update a course they own.
-     *     - Auth: {uid: 'admin123'}
-     *     - Resource Data: {id: 'course123', name: 'Test Course', description: 'A test course', adminId: 'admin123'}
-     *     - Request Data: {name: 'Updated Course Name'}
-     * @allow (delete) Admin with ID 'admin123' can delete a course they own.
-     *     - Auth: {uid: 'admin123'}
-     *     - Resource Data: {id: 'course123', name: 'Test Course', description: 'A test course', adminId: 'admin123'}
-     * @deny (create) Non-admin user with ID 'user123' cannot create a course.
-     *     - Auth: {uid: 'user123'}
-     *     - Request Data: {id: 'course123', name: 'Test Course', description: 'A test course', adminId: 'user123'}
-     * @deny (update) Non-admin user with ID 'user123' cannot update a course owned by 'admin123'.
-     *     - Auth: {uid: 'user123'}
-     *     - Resource Data: {id: 'course123', name: 'Test Course', description: 'A test course', adminId: 'admin123'}
-     *     - Request Data: {name: 'Updated Course Name'}
-     * @principle Enforces admin ownership for course content.
-     */
-    match /courses/{courseId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      function isAdmin(adminId) {
-        return request.auth.uid == adminId;
-      }
-
-      function isExistingAdmin(adminId) {
-        return isAdmin(adminId) && resource.data.adminId == adminId;
-      }
-
-      allow get, list: if isSignedIn();
-      allow create: if isSignedIn() && isAdmin(request.resource.data.adminId);
-      allow update: if isSignedIn() && isExistingAdmin(resource.data.adminId);
-      allow delete: if isSignedIn() && isExistingAdmin(resource.data.adminId);
-
-      /**
-       * @description Manages topics within a course.
-       * @path /courses/{courseId}/topics/{topicId}
-       * @allow (create) Admin with ID 'admin123' can create a topic in their course.
-       *     - Auth: {uid: 'admin123'}
-       *     - Request Data: {id: 'topic123', courseId: 'course123', name: 'Test Topic', description: 'A test topic', adminId: 'admin123'}
-       * @allow (get) Any signed-in user can read a topic.
-       *     - Auth: {uid: 'user123'}
-       * @allow (update) Admin with ID 'admin123' can update a topic in their course.
-       *     - Auth: {uid: 'admin123'}
-       *     - Resource Data: {id: 'topic123', courseId: 'course123', name: 'Test Topic', description: 'A test topic', adminId: 'admin123'}
-       *     - Request Data: {name: 'Updated Topic Name'}
-       * @allow (delete) Admin with ID 'admin123' can delete a topic in their course.
-       *     - Auth: {uid: 'admin123'}
-       *     - Resource Data: {id: 'topic123', courseId: 'course123', name: 'Test Topic', description: 'A test topic', adminId: 'admin123'}
-       * @deny (create) Non-admin user with ID 'user123' cannot create a topic in course owned by 'admin123'.
-       *     - Auth: {uid: 'user123'}
-       *     - Request Data: {id: 'topic123', courseId: 'course123', name: 'Test Topic', description: 'A test topic', adminId: 'admin123'}
-       * @deny (update) Non-admin user with ID 'user123' cannot update a topic in course owned by 'admin123'.
-       *     - Auth: {uid: 'user123'}
-       *     - Resource Data: {id: 'topic123', courseId: 'course123', name: 'Test Topic', description: 'A test topic', adminId: 'admin123'}
-       *     - Request Data: {name: 'Updated Topic Name'}
-       * @principle Enforces admin ownership for topics within courses.
-       */
-      match /topics/{topicId} {
-        allow get, list: if isSignedIn();
-        allow create: if isSignedIn() && isAdmin(request.resource.data.adminId);
-        allow update: if isSignedIn() && isExistingAdmin(resource.data.adminId);
-        allow delete: if isSignedIn() && isExistingAdmin(resource.data.adminId);
-
-        /**
-         * @description Manages flashcards within a topic.
-         * @path /courses/{courseId}/topics/{topicId}/flashcards/{flashcardId}
-         * @allow (create) Admin with ID 'admin123' can create a flashcard in their topic.
-         *     - Auth: {uid: 'admin123'}
-         *     - Request Data: {id: 'flashcard123', topicId: 'topic123', front: 'Front of card', back: 'Back of card', adminId: 'admin123'}
-         * @allow (get) Any signed-in user can read a flashcard.
-         *     - Auth: {uid: 'user123'}
-         * @allow (update) Admin with ID 'admin123' can update a flashcard in their topic.
-         *     - Auth: {uid: 'admin123'}
-         *     - Resource Data: {id: 'flashcard123', topicId: 'topic123', front: 'Front of card', back: 'Back of card', adminId: 'admin123'}
-         *     - Request Data: {front: 'Updated front'}
-         * @allow (delete) Admin with ID 'admin123' can delete a flashcard in their topic.
-         *     - Auth: {uid: 'admin123'}
-         *     - Resource Data: {id: 'flashcard123', topicId: 'topic123', front: 'Front of card', back: 'Back of card', adminId: 'admin123'}
-         * @deny (create) Non-admin user with ID 'user123' cannot create a flashcard in topic owned by 'admin123'.
-         *     - Auth: {uid: 'user123'}
-         *     - Request Data: {id: 'flashcard123', topicId: 'topic123', front: 'Front of card', back: 'Back of card', adminId: 'admin123'}
-         * @deny (update) Non-admin user with ID 'user123' cannot update a flashcard in topic owned by 'admin123'.
-         *     - Auth: {uid: 'user123'}
-         *     - Resource Data: {id: 'flashcard123', topicId: 'topic123', front: 'Front of card', back: 'Back of card', adminId: 'admin123'}
-         *     - Request Data: {front: 'Updated front'}
-         * @principle Enforces admin ownership for flashcards within topics.
-         */
-        match /flashcards/{flashcardId} {
-          allow get, list: if isSignedIn();
-          allow create: if isSignedIn() && isAdmin(request.resource.data.adminId);
-          allow update: if isSignedIn() && isExistingAdmin(resource.data.adminId);
-          allow delete: if isSignedIn() && isExistingAdmin(resource.data.adminId);
-        }
-
-        /**
-         * @description Manages questions within a topic.
-         * @path /courses/{courseId}/topics/{topicId}/questions/{questionId}
-         * @allow (create) Admin with ID 'admin123' can create a question in their topic.
-         *     - Auth: {uid: 'admin123'}
-         *     - Request Data: {id: 'question123', topicId: 'topic123', type: 'MCQ', text: 'Question text', correctAnswer: 'A', adminId: 'admin123'}
-         * @allow (get) Any signed-in user can read a question.
-         *     - Auth: {uid: 'user123'}
-         * @allow (update) Admin with ID 'admin123' can update a question in their topic.
-         *     - Auth: {uid: 'admin123'}
-         *     - Resource Data: {id: 'question123', topicId: 'topic123', type: 'MCQ', text: 'Question text', correctAnswer: 'A', adminId: 'admin123'}
-         *     - Request Data: {text: 'Updated question text'}
-         * @allow (delete) Admin with ID 'admin123' can delete a question in their topic.
-         *     - Auth: {uid: 'admin123'}
-         *     - Resource Data: {id: 'question123', topicId: 'topic123', type: 'MCQ', text: 'Question text', correctAnswer: 'A', adminId: 'admin123'}
-         * @deny (create) Non-admin user with ID 'user123' cannot create a question in topic owned by 'admin123'.
-         *     - Auth: {uid: 'user123'}
-         *     - Request Data: {id: 'question123', topicId: 'topic123', type: 'MCQ', text: 'Question text', correctAnswer: 'A', adminId: 'admin123'}
-         * @deny (update) Non-admin user with ID 'user123' cannot update a question in topic owned by 'admin123'.
-         *     - Auth: {uid: 'user123'}
-         *     - Resource Data: {id: 'question123', topicId: 'topic123', type: 'MCQ', text: 'Question text', correctAnswer: 'A', adminId: 'admin123'}
-         *     - Request Data: {text: 'Updated question text'}
-         * @principle Enforces admin ownership for questions within topics.
-         */
-        match /questions/{questionId} {
-          allow get, list: if isSignedIn();
-          allow create: if isSignedIn() && isAdmin(request.resource.data.adminId);
-          allow update: if isSignedIn() && isExistingAdmin(resource.data.adminId);
-          allow delete: if isSignedIn() && isExistingAdmin(resource.data.adminId);
-        }
-
-        /**
-         * @description Manages quizzes within a topic.
-         * @path /courses/{courseId}/topics/{topicId}/quizzes/{quizId}
-         * @allow (create) Admin with ID 'admin123' can create a quiz in their topic.
-         *     - Auth: {uid: 'admin123'}
-         *     - Request Data: {id: 'quiz123', topicId: 'topic123', name: 'Test Quiz', description: 'A test quiz', questionIds: [], adminId: 'admin123'}
-         * @allow (get) Any signed-in user can read a quiz.
-         *     - Auth: {uid: 'user123'}
-         * @allow (update) Admin with ID 'admin123' can update a quiz in their topic.
-         *     - Auth: {uid: 'admin123'}
-         *     - Resource Data: {id: 'quiz123', topicId: 'topic123', name: 'Test Quiz', description: 'A test quiz', questionIds: [], adminId: 'admin123'}
-         *     - Request Data: {name: 'Updated quiz name'}
-         * @allow (delete) Admin with ID 'admin123' can delete a quiz in their topic.
-         *     - Auth: {uid: 'admin123'}
-         *     - Resource Data: {id: 'quiz123', topicId: 'topic123', name: 'Test Quiz', description: 'A test quiz', questionIds: [], adminId: 'admin123'}
-         * @deny (create) Non-admin user with ID 'user123' cannot create a quiz in topic owned by 'admin123'.
-         *     - Auth: {uid: 'user123'}
-         *     - Request Data: {id: 'quiz123', topicId: 'topic123', name: 'Test Quiz', description: 'A test quiz', questionIds: [], adminId: 'admin123'}
-         * @deny (update) Non-admin user with ID 'user123' cannot update a quiz in topic owned by 'admin123'.
-         *     - Auth: {uid: 'user123'}
-         *     - Resource Data: {id: 'quiz123', topicId: 'topic123', name: 'Test Quiz', description: 'A test quiz', questionIds: [], adminId: 'admin123'}
-         *     - Request Data: {name: 'Updated quiz name'}
-         * @principle Enforces admin ownership for quizzes within topics.
-         */
-        match /quizzes/{quizId} {
-          allow get, list: if isSignedIn();
-          allow create: if isSignedIn() && isAdmin(request.resource.data.adminId);
-          allow update: if isSignedIn() && isExistingAdmin(resource.data.adminId);
-          allow delete: if isSignedIn() && isExistingAdmin(resource.data.adminId);
-        }
-      }
-    }
-
-    /**
-     * @description Manages user enrollment data.
-     * @path /users/{userId}/enrollments/{enrollmentId}
-     * @allow (create) User with ID 'user123' can create their own enrollment.
-     *     - Auth: {uid: 'user123'}
-     *     - Request Data: {id: 'enroll123', userId: 'user123', courseId: 'course123', enrollmentDate: '2024-01-01'}
-     * @allow (get) User with ID 'user123' can read their own enrollment.
-     *     - Auth: {uid: 'user123'}
-     * @allow (update) User with ID 'user123' can update their own enrollment.
-     *     - Auth: {uid: 'user123'}
-     *     - Resource Data: {id: 'enroll123', userId: 'user123', courseId: 'course123', enrollmentDate: '2024-01-01'}
-     *     - Request Data: {enrollmentDate: '2024-01-02'}
-     * @allow (delete) User with ID 'user123' can delete their own enrollment.
-     *     - Auth: {uid: 'user123'}
-     * @deny (create) User with ID 'user456' cannot create an enrollment for user 'user123'.
-     *     - Auth: {uid: 'user456'}
-     *     - Request Data: {id: 'enroll123', userId: 'user123', courseId: 'course123', enrollmentDate: '2024-01-01'}
-     * @principle Enforces document ownership for writes.
-     */
-    match /users/{userId}/enrollments/{enrollmentId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      function isOwner(userId) {
-        return request.auth.uid == userId;
-      }
-
-      function isExistingOwner(userId) {
-        return isOwner(userId) && resource.data.userId == userId;
-      }
-
-      allow get, list: if isOwner(userId);
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.userId == userId;
-      allow update: if isSignedIn() && isExistingOwner(userId);
-      allow delete: if isSignedIn() && isExistingOwner(userId);
-    }
-
-    /**
-     * @description Manages user quiz attempts data.
+     * @description Allows access to quiz attempts for a user. Path-based ownership ensures only the user can access their quiz attempts.
      * @path /users/{userId}/quizAttempts/{quizAttemptId}
-     * @allow (create) User with ID 'user123' can create their own quiz attempt.
-     *     - Auth: {uid: 'user123'}
-     *     - Request Data: {id: 'attempt123', userId: 'user123', quizId: 'quiz123', score: 80, attemptedDate: '2024-01-01'}
-     * @allow (get) User with ID 'user123' can read their own quiz attempt.
-     *     - Auth: {uid: 'user123'}
-     * @allow (update) User with ID 'user123' can update their own quiz attempt.
-     *     - Auth: {uid: 'user123'}
-     *     - Resource Data: {id: 'attempt123', userId: 'user123', quizId: 'quiz123', score: 80, attemptedDate: '2024-01-01'}
-     *     - Request Data: {score: 90}
-     * @allow (delete) User with ID 'user123' can delete their own quiz attempt.
-     *     - Auth: {uid: 'user123'}
-     * @deny (create) User with ID 'user456' cannot create a quiz attempt for user 'user123'.
-     *     - Auth: {uid: 'user456'}
-     *     - Request Data: {id: 'attempt123', userId: 'user123', quizId: 'quiz123', score: 80, attemptedDate: '2024-01-01'}
-     * @principle Enforces document ownership for writes.
+     * @allow (get, list) The user can read their own quiz attempts.
+     * @deny (create, update, delete) Another user attempts to modify this quiz attempt.
+     * @principle Enforces document ownership for reads and writes.
      */
     match /users/{userId}/quizAttempts/{quizAttemptId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      function isOwner(userId) {
-        return request.auth.uid == userId;
-      }
-
-      function isExistingOwner(userId) {
-        return isOwner(userId) && resource.data.userId == userId;
-      }
-
       allow get, list: if isOwner(userId);
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.userId == userId;
-      allow update: if isSignedIn() && isExistingOwner(userId);
-      allow delete: if isSignedIn() && isExistingOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Manages user performance data.
+     * @description Allows access to performance data for a user. Path-based ownership ensures only the user can access their performance data.
      * @path /users/{userId}/performances/{performanceId}
-     * @allow (create) User with ID 'user123' can create their own performance data.
-     *     - Auth: {uid: 'user123'}
-     *     - Request Data: {id: 'perf123', userId: 'user123', topicId: 'topic123', accuracy: 0.75, timeSpent: 3600, flashcardsMastered: 10}
-     * @allow (get) User with ID 'user123' can read their own performance data.
-     *     - Auth: {uid: 'user123'}
-     * @allow (update) User with ID 'user123' can update their own performance data.
-     *     - Auth: {uid: 'user123'}
-     *     - Resource Data: {id: 'perf123', userId: 'user123', topicId: 'topic123', accuracy: 0.75, timeSpent: 3600, flashcardsMastered: 10}
-     *     - Request Data: {accuracy: 0.80}
-     * @allow (delete) User with ID 'user123' can delete their own performance data.
-     *     - Auth: {uid: 'user123'}
-     * @deny (create) User with ID 'user456' cannot create performance data for user 'user123'.
-     *     - Auth: {uid: 'user456'}
-     *     - Request Data: {id: 'perf123', userId: 'user123', topicId: 'topic123', accuracy: 0.75, timeSpent: 3600, flashcardsMastered: 10}
-     * @principle Enforces document ownership for writes.
+     * @allow (get, list) The user can read their own performance data.
+     * @deny (create, update, delete) Another user attempts to modify this performance data.
+     * @principle Enforces document ownership for reads and writes.
      */
     match /users/{userId}/performances/{performanceId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      function isOwner(userId) {
-        return request.auth.uid == userId;
-      }
-
-      function isExistingOwner(userId) {
-        return isOwner(userId) && resource.data.userId == userId;
-      }
-
       allow get, list: if isOwner(userId);
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.userId == userId;
-      allow update: if isSignedIn() && isExistingOwner(userId);
-      allow delete: if isSignedIn() && isExistingOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Manages user badges data.
+     * @description Allows access to badges earned by a user. Path-based ownership ensures only the user can access their badges.
      * @path /users/{userId}/userBadges/{userBadgeId}
-     * @allow (create) User with ID 'user123' can create their own user badge (though this would typically be done by the application).
-     *     - Auth: {uid: 'user123'}
-     *     - Request Data: {id: 'ub123', userId: 'user123', badgeId: 'badge123', earnedDate: '2024-01-01'}
-     * @allow (get) User with ID 'user123' can read their own user badge.
-     *     - Auth: {uid: 'user123'}
-     * @allow (update) User with ID 'user123' can update their own user badge.
-     *     - Auth: {uid: 'user123'}
-     *     - Resource Data: {id: 'ub123', userId: 'user123', badgeId: 'badge123', earnedDate: '2024-01-01'}
-     *     - Request Data: {earnedDate: '2024-01-02'}
-     * @allow (delete) User with ID 'user123' can delete their own user badge.
-     *     - Auth: {uid: 'user123'}
-     * @deny (create) User with ID 'user456' cannot create a user badge for user 'user123'.
-     *     - Auth: {uid: 'user456'}
-     *     - Request Data: {id: 'ub123', userId: 'user123', badgeId: 'badge123', earnedDate: '2024-01-01'}
-     * @principle Enforces document ownership for writes.
+     * @allow (get, list) The user can read their own badges.
+     * @deny (create, update, delete) Another user attempts to modify this badge.
+     * @principle Enforces document ownership for reads and writes.
      */
     match /users/{userId}/userBadges/{userBadgeId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      function isOwner(userId) {
-        return request.auth.uid == userId;
-      }
-
-      function isExistingOwner(userId) {
-        return isOwner(userId) && resource.data.userId == userId;
-      }
-
       allow get, list: if isOwner(userId);
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.userId == userId;
-      allow update: if isSignedIn() && isExistingOwner(userId);
-      allow delete: if isSignedIn() && isExistingOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Manages badge data.
+     * @description Allows access to information about available badges.
      * @path /badges/{badgeId}
-     * @allow (get) Any signed-in user can read a badge.
-     *     - Auth: {uid: 'user123'}
-     * @allow (list) Any signed-in user can list badges.
-     *     - Auth: {uid: 'user123'}
-     * @deny (create) No one can create a badge (TODO: Add admin role).
-     *     - Auth: {uid: 'user123'}
-     *     - Request Data: {id: 'badge123', name: 'Test Badge', description: 'A test badge', imageUrl: 'http://example.com/badge.png'}
-     * @deny (update) No one can update a badge (TODO: Add admin role).
-     *     - Auth: {uid: 'user123'}
-     *     - Resource Data: {id: 'badge123', name: 'Test Badge', description: 'A test badge', imageUrl: 'http://example.com/badge.png'}
-     *     - Request Data: {name: 'Updated Badge Name'}
-     * @deny (delete) No one can delete a badge (TODO: Add admin role).
-     *     - Auth: {uid: 'user123'}
-     *     - Resource Data: {id: 'badge123', name: 'Test Badge', description: 'A test badge', imageUrl: 'http://example.com/badge.png'}
+     * @allow (get, list) Anyone can read badge information.
+     * @deny (create, update, delete) Only admins should be able to modify badge data.  Placeholder rule for now.
+     * @principle Open reads, restricted writes.
      */
     match /badges/{badgeId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-      allow get, list: if isSignedIn();
-      allow create: if false; // TODO: Add admin role validation
-      allow update: if false; // TODO: Add admin role validation
-      allow delete: if false; // TODO: Add admin role validation
+      allow get, list: if true;
+      allow create: if false; // TODO: Restrict to admins
+      allow update: if false; // TODO: Restrict to admins
+      allow delete: if false; // TODO: Restrict to admins
+    }
+
+   /**
+     * @description Allows access to flashcardMastery for a user. Path-based ownership ensures only the user can access their flashcardMastery.
+     * @path /users/{userId}/flashcardMastery
+     * @allow (list) The user can read their own flashcardMastery.
+     * @deny (create, update, delete) Another user attempts to modify this flashcardMastery.
+     * @principle Enforces document ownership for reads and writes.
+     */
+    match /users/{userId}/flashcardMastery {
+      allow get: if false;
+      allow list: if isOwner(userId);
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
   }
 }
