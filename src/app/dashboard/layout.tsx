@@ -12,6 +12,7 @@ import {
   Settings,
   LogOut,
   BrainCircuit,
+  PlusCircle,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -44,16 +45,17 @@ type NavItem = {
   href: string;
   label: string;
   icon: React.ElementType;
-  roles: ('student' | 'admin')[];
+  roles: ('student' | 'admin' | 'creator')[];
   exact?: boolean;
 };
 
 const navItems: NavItem[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['student', 'admin'], exact: true },
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['student', 'admin', 'creator'], exact: true },
   { href: '/dashboard', label: 'Courses', icon: BookOpen, roles: ['student'] },
   { href: '/dashboard/performance', label: 'Performance', icon: BarChart3, roles: ['student'] },
   { href: '/dashboard/leaderboard', label: 'Leaderboard', icon: Trophy, roles: ['student'] },
   { href: '/dashboard/admin', label: 'Admin', icon: Shield, roles: ['admin'] },
+  { href: '/dashboard/admin/new', label: 'Create Course', icon: PlusCircle, roles: ['admin', 'creator'] },
 ];
 
 export default function DashboardLayout({
@@ -104,7 +106,7 @@ export default function DashboardLayout({
               <SidebarMenuItem key={item.label}>
                 <SidebarMenuButton
                   asChild
-                  isActive={item.exact ? pathname === item.href : pathname.startsWith(item.href)}
+                  isActive={item.exact ? pathname === item.href : pathname.startsWith(item.href) && item.href !== '/dashboard'}
                   tooltip={item.label}
                 >
                   <Link href={item.href}>
@@ -183,3 +185,5 @@ function UserNav({ user, onLogout }: { user: User | null, onLogout: () => void }
     </DropdownMenu>
   );
 }
+
+    

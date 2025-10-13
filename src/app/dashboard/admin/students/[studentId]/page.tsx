@@ -8,7 +8,7 @@ import {
   useFirestore,
   useMemoFirebase,
 } from '@/firebase';
-import { doc, collection, query, orderBy, where } from 'firebase/firestore';
+import { doc, collection, query, orderBy, where, updateDoc } from 'firebase/firestore';
 import type { User } from '@/lib/auth';
 import type { QuizAttempt, Course } from '@/lib/data';
 import {
@@ -22,7 +22,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { EarnedBadges } from '@/components/earned-badges';
-import { Zap, Flame, Loader2, BookOpen } from 'lucide-react';
+import { Zap, Flame, Loader2, BookOpen, Shield } from 'lucide-react';
 import Link from 'next/link';
 import {
   Table,
@@ -32,8 +32,18 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { format } from 'date-fns';
 import { useCourseProgress } from '@/hooks/use-course-progress';
+import { useState } from 'react';
+import { useToast } from '@/hooks/use-toast';
+import { Label } from '@/components/ui/label';
 
 function EnrolledCourseCard({ course }: { course: Course }) {
     const { progress, isLoading } = useCourseProgress(course.id);
@@ -58,6 +68,64 @@ function EnrolledCourseCard({ course }: { course: Course }) {
             </CardContent>
         </Card>
     )
+}
+
+function RoleManager({ studentId, currentRole }: { studentId: string; currentRole: 'student' | 'admin' | 'creator' }) {
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const [role, setRole] = useState(currentRole);
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleRoleChange = async (newRole: 'student' | 'creator') => {
+        if (newRole === currentRole) return;
+        setIsLoading(true);
+        try {
+            const userRef = doc(firestore, 'users', studentId);
+            await updateDoc(userRef, { role: newRole });
+            setRole(newRole);
+            toast({
+                title: "Role Updated",
+                description: `User role has been changed to ${newRole}.`,
+            });
+        } catch (error: any) {
+            toast({
+                variant: 'destructive',
+                title: 'Error Updating Role',
+                description: error.message,
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-primary" />
+                    Manage Role
+                </CardTitle>
+                <CardDescription>
+                    Assign a role to this user to grant or revoke content creation permissions.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="space-y-2">
+                    <Label htmlFor="role-select">User Role</Label>
+                     <Select value={role} onValueChange={handleRoleChange} disabled={isLoading}>
+                        <SelectTrigger id="role-select">
+                            <SelectValue placeholder="Select a role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="student">Student</SelectItem>
+                            <SelectItem value="creator">Creator</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                 {isLoading && <p className="text-sm text-muted-foreground flex items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Updating...</p>}
+            </CardContent>
+        </Card>
+    );
 }
 
 export default function StudentDetailPage() {
@@ -159,6 +227,8 @@ export default function StudentDetailPage() {
         </Card>
       </div>
 
+       <RoleManager studentId={studentId} currentRole={student.role} />
+
        <EarnedBadges userId={studentId} />
 
         <div>
@@ -218,3 +288,5 @@ export default function StudentDetailPage() {
     </div>
   );
 }
+
+    

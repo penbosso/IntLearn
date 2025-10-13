@@ -24,7 +24,7 @@ import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection, query, where, collectionGroup } from 'firebase/firestore';
 import { useUser } from '@/firebase';
 import AdminAnalyticsChart from '@/components/admin-analytics-chart';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { getCurrentUser, User } from '@/lib/auth';
 
 
@@ -66,7 +66,14 @@ export default function AdminDashboardPage() {
 
   const isLoading = areCoursesLoading || areStudentsLoading || !user;
 
-  if (isLoading) {
+  const creatorsQuery = useMemoFirebase(
+    () => (firestore ? query(collection(firestore, 'users'), where('role', '==', 'creator')) : null),
+    [firestore]
+  );
+  const { data: creators, isLoading: areCreatorsLoading } = useCollection(creatorsQuery);
+  const totalContentCreators = useMemo(() => creators?.length || 0, [creators]);
+
+  if (isLoading || areCreatorsLoading) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -120,19 +127,13 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader>
-            <CardTitle>Manage Students</CardTitle>
-            <CardDescription>
-                View student progress and analytics.
-            </CardDescription>
+           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Content Creators</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-              <Button asChild>
-                  <Link href="/dashboard/admin/students">
-                      <Users className="mr-2 h-4 w-4" />
-                      View All Students
-                  </Link>
-              </Button>
+            <div className="text-2xl font-bold">{totalContentCreators}</div>
+            <p className="text-xs text-muted-foreground">Users with creator permissions</p>
           </CardContent>
         </Card>
       </div>
@@ -192,4 +193,6 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
+    
+
     

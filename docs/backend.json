@@ -21,7 +21,21 @@
         },
         "role": {
           "type": "string",
-          "description": "Role of the user (e.g., 'admin', 'student')."
+          "description": "Role of the user.",
+          "enum": ["admin", "student", "creator"]
+        },
+        "xp": {
+          "type": "number",
+          "description": "Experience points earned by the user."
+        },
+        "streak": {
+          "type": "number",
+          "description": "User's current daily study streak."
+        },
+        "lastActivityDate": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The last date the user completed a learning activity."
         }
       },
       "required": [
@@ -52,6 +66,11 @@
         "adminId": {
           "type": "string",
           "description": "Reference to the Admin who created the course. (Relationship: Admin 1:N Course)"
+        },
+        "status": {
+          "type": "string",
+          "description": "The publishing status of the course.",
+          "enum": ["draft", "published"]
         }
       },
       "required": [
@@ -119,6 +138,49 @@
         "topicId",
         "front",
         "back"
+      ]
+    },
+    "FlashcardMastery": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "FlashcardMastery",
+      "type": "object",
+      "description": "Tracks a student's mastery of a single flashcard.",
+      "properties": {
+        "userId": {
+          "type": "string"
+        },
+        "flashcardId": {
+          "type": "string"
+        },
+        "topicId": {
+          "type": "string"
+        },
+        "courseId": {
+          "type": "string"
+        },
+        "correctStreak": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "learning",
+            "mastered"
+          ]
+        },
+        "lastReviewed": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "userId",
+        "flashcardId",
+        "topicId",
+        "courseId",
+        "correctStreak",
+        "status",
+        "lastReviewed"
       ]
     },
     "Question": {
@@ -565,6 +627,26 @@
         }
       },
       {
+        "path": "/users/{userId}/flashcardMastery/{flashcardId}",
+        "definition": {
+          "entityName": "FlashcardMastery",
+          "schema": {
+            "$ref": "#/backend/entities/FlashcardMastery"
+          },
+          "description": "Stores a user's mastery progress for a specific flashcard. Path-based ownership ensures only the user can access their own progress.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "flashcardId",
+              "description": "The unique identifier for the flashcard."
+            }
+          ]
+        }
+      },
+      {
         "path": "/users/{userId}/userBadges/{userBadgeId}",
         "definition": {
           "entityName": "UserBadge",
@@ -604,3 +686,5 @@
     "reasoning": "The Firestore structure is designed to support the IntLearn application's core features, focusing on AI-driven content generation, personalized learning, and performance tracking. The structure prioritizes authorization independence by denormalizing authorization data (specifically, the `adminId` for courses) into subcollections when necessary.\n\n**Authorization Independence and QAPs:**\n\n*   **Courses and Subcollections:** The `courses/{courseId}` collection stores course information. The `adminId` field indicates the administrator who created the course. Subcollections like `topics`, `flashcards`, `questions`, and `quizzes` are nested under each course. To ensure authorization independence, each document within these subcollections will need to duplicate the `adminId` from the parent course. This allows rules to validate that the admin modifying content in these subcollections is indeed the owner, without needing a `get()` call.\n*   **User Data:** User-specific data, like `enrollments`, `quizAttempts`, `performances`, and `userBadges` are stored under `/users/{userId}`. This path-based ownership simplifies security rules, ensuring only the user or an admin can access this data.\n\n**Structural Segregation:**\n\n*   The structure segregates data with different access needs. For example, user profiles are stored in the `/users/{userId}` collection, ensuring that only the user and potentially admins have access to this information. Course content is stored separately, with access controlled based on the `adminId` and user roles.\n\n**Access Modeling:**\n\n*   **Path-Based Ownership:** User-related data (enrollments, quiz attempts, performance, badges) uses the `/users/{userId}` path, clearly establishing ownership. Courses are owned by admins, and this ownership is denormalized into the subcollections.\n\n**Data Clarity and Predictability:**\n\n*   The schema uses explicit naming conventions and avoids dynamic keys. Relationships between entities are clearly defined using foreign keys (e.g., `courseId`, `topicId`).\n\nThis structure is designed to be secure, scalable, and easily debuggable, adhering to the principles of authorization independence, structural segregation, and clear access modeling. The denormalization of `adminId` into course subcollections enables robust and efficient security rules without relying on costly `get()` operations."
   }
 }
+
+    
