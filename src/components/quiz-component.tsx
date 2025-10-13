@@ -52,7 +52,7 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
 
     try {
         const percentage = Math.round((finalScore / questions.length) * 100);
-        const xpGained = finalScore * 10; // e.g., 10 XP per correct answer
+        const xpGained = Math.round(finalScore * 10); // e.g., 10 XP per correct answer, fractional scores are rounded
 
         // Use a transaction to ensure atomicity
         await runTransaction(firestore, async (transaction) => {
@@ -154,6 +154,7 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
     if (!answerToCheck) return;
 
     let isCorrect = false;
+    let partialScore = 0;
 
     if (currentQuestion.type === 'Short Answer') {
         setIsEvaluating(true);
@@ -163,27 +164,31 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
                 correctAnswer: currentQuestion.answer,
                 studentAnswer: answerToCheck,
             });
-            isCorrect = result.isCorrect;
+            partialScore = result.correctness;
+            isCorrect = result.correctness >= 0.8; // Consider >= 80% as correct for UI feedback
             toast({
-                title: result.isCorrect ? 'Correct!' : 'Incorrect',
-                description: result.feedback,
+                title: isCorrect ? 'Correct!' : 'Partially Correct',
+                description: `${result.feedback} (Score: ${Math.round(result.correctness * 100)}%)`,
             });
         } catch (error) {
             console.error("AI evaluation failed, falling back to exact match", error);
             // Fallback to simple check on AI error
             isCorrect = answerToCheck.trim().toLowerCase() === currentQuestion.answer.trim().toLowerCase();
+            partialScore = isCorrect ? 1 : 0;
         } finally {
             setIsEvaluating(false);
         }
     } else {
         isCorrect = answerToCheck.trim().toLowerCase() === currentQuestion.answer.trim().toLowerCase();
+        partialScore = isCorrect ? 1 : 0;
     }
 
 
     if (isCorrect) {
-      setScore(score + 1);
+      setScore(score + partialScore);
       setAnswerState('correct');
     } else {
+      setScore(score + partialScore);
       setAnswerState('incorrect');
     }
   };
@@ -242,7 +247,7 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
         <h2 className="text-3xl font-bold mb-2">Quiz Complete!</h2>
         <p className="text-muted-foreground mb-6">Here's how you did:</p>
         <div className="text-6xl font-bold mb-2 text-primary">{percentage}%</div>
-        <p className="text-muted-foreground mb-6">You answered {score} out of {questions.length} questions correctly.</p>
+        <p className="text-muted-foreground mb-6">You answered {score.toFixed(1)} out of {questions.length} questions correctly.</p>
         <Button onClick={handleRestart}>
           <Repeat className="mr-2 h-4 w-4" />
           Take Quiz Again
