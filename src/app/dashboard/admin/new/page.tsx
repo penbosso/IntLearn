@@ -44,6 +44,7 @@ export default function NewCoursePage() {
   const { user: firebaseUser } = useUser();
   const [loading, setLoading] = useState(false);
   const [courseTitle, setCourseTitle] = useState('');
+  const [topicName, setTopicName] = useState('');
   const [textContent, setTextContent] = useState('');
   const [files, setFiles] = useState<File[] | null>(null);
 
@@ -54,6 +55,14 @@ export default function NewCoursePage() {
         variant: 'destructive',
         title: 'Course Title Required',
         description: 'Please provide a title for your course.',
+      });
+      return;
+    }
+     if (!topicName.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Topic Name Required',
+        description: 'Please provide a name for the initial topic.',
       });
       return;
     }
@@ -80,8 +89,8 @@ export default function NewCoursePage() {
       }
       
       const appUser = await getCurrentUser(firebaseUser);
-      if (appUser.role !== 'admin') {
-        throw new Error('You must be an administrator to create a course.');
+      if (appUser.role !== 'admin' && appUser.role !== 'creator') {
+        throw new Error('You must be an administrator or creator to create a course.');
       }
 
       const materials: { type: 'text' | 'image' | 'pdf', content: string }[] = [];
@@ -118,11 +127,11 @@ export default function NewCoursePage() {
         status: 'draft',
       });
 
-      // Create a default Topic for the course
+      // Create the initial Topic for the course
       const topicRef = doc(collection(firestore, `courses/${courseRef.id}/topics`));
       batch.set(topicRef, {
-        name: 'General',
-        description: 'General topic for the course',
+        name: topicName,
+        description: `Initial topic for ${courseTitle}`,
         courseId: courseRef.id,
         adminId: firebaseUser.uid,
         createdAt: serverTimestamp(),
@@ -185,7 +194,7 @@ export default function NewCoursePage() {
           <CardHeader>
             <CardTitle>Course Details</CardTitle>
             <CardDescription>
-              Provide a title and upload your course materials.
+              Provide a title, an initial topic, and your course materials.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -197,6 +206,17 @@ export default function NewCoursePage() {
                 required
                 value={courseTitle}
                 onChange={(e) => setCourseTitle(e.target.value)}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="topic-name">Initial Topic Name</Label>
+              <Input
+                id="topic-name"
+                placeholder="e.g., Basic Syntax and Variables"
+                required
+                value={topicName}
+                onChange={(e) => setTopicName(e.target.value)}
               />
             </div>
 

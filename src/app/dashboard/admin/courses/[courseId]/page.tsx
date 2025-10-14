@@ -179,23 +179,29 @@ function EditCourseDialog({ course, courseId }: { course: any; courseId: string 
 }
 
 
-function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onContentAdded: () => void }) {
+function AddContentDialog({ courseId, topics, onContentAdded }: { courseId: string; topics: any[]; onContentAdded: () => void }) {
   const { toast } = useToast();
   const firestore = useFirestore();
   const { user: firebaseUser } = useUser();
   const [loading, setLoading] = useState(false);
-  const [topicName, setTopicName] = useState('');
+  
+  const [topicSelection, setTopicSelection] = useState('existing'); // 'existing' or 'new'
+  const [selectedTopicId, setSelectedTopicId] = useState<string | undefined>(topics[0]?.id);
+  const [newTopicName, setNewTopicName] = useState('');
+
   const [textContent, setTextContent] = useState('');
   const [files, setFiles] = useState<File[] | null>(null);
   const [open, setOpen] = useState(false);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-     if (!topicName.trim()) {
+     const topicName = topicSelection === 'new' ? newTopicName : topics.find(t => t.id === selectedTopicId)?.name;
+
+    if (!topicName || !topicName.trim()) {
       toast({
         variant: 'destructive',
-        title: 'Topic Name Required',
-        description: 'Please provide a name for the new topic.',
+        title: 'Topic Required',
+        description: 'Please select an existing topic or provide a name for a new one.',
       });
       return;
     }
@@ -220,8 +226,8 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
       }
       
       const appUser = await getCurrentUser(firebaseUser);
-      if (appUser.role !== 'admin') {
-        throw new Error('You must be an administrator to add content.');
+      if (appUser.role !== 'admin' && appUser.role !== 'creator') {
+        throw new Error('You must be an administrator or creator to add content.');
       }
 
       const materials: { type: 'text' | 'image' | 'pdf', content: string }[] = [];
@@ -246,33 +252,46 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
 
       const batch = writeBatch(firestore);
 
-      const topicRef = doc(collection(firestore, `courses/${courseId}/topics`));
-      batch.set(topicRef, {
-        name: topicName,
-        description: `Content for ${topicName}`,
-        courseId: courseId,
-        adminId: firebaseUser.uid,
-        createdAt: serverTimestamp(),
-      });
+      let topicRef;
+      let finalTopicId;
+
+      if (topicSelection === 'new') {
+        topicRef = doc(collection(firestore, `courses/${courseId}/topics`));
+        finalTopicId = topicRef.id;
+        batch.set(topicRef, {
+            name: newTopicName,
+            description: `Content for ${newTopicName}`,
+            courseId: courseId,
+            adminId: firebaseUser.uid,
+            createdAt: serverTimestamp(),
+        });
+      } else {
+        finalTopicId = selectedTopicId;
+      }
+      
+      if (!finalTopicId) {
+        throw new Error('Could not determine the topic for the new content.');
+      }
+
 
       result.flashcards.forEach((flashcard) => {
-        const flashcardRef = doc(collection(firestore,`courses/${courseId}/topics/${topicRef.id}/flashcards`));
+        const flashcardRef = doc(collection(firestore,`courses/${courseId}/topics/${finalTopicId}/flashcards`));
         batch.set(flashcardRef, {
           ...flashcard,
-          topicId: topicRef.id,
+          topicId: finalTopicId,
           status: 'needs-review',
           adminId: firebaseUser.uid,
         });
       });
 
       result.questions.forEach((question) => {
-        const questionRef = doc(collection(firestore, `courses/${courseId}/topics/${topicRef.id}/questions`));
+        const questionRef = doc(collection(firestore, `courses/${courseId}/topics/${finalTopicId}/questions`));
         batch.set(questionRef, {
           text: question.question,
           answer: question.answer,
           type: question.type,
           options: question.options ?? [],
-          topicId: topicRef.id,
+          topicId: finalTopicId,
           status: 'needs-review',
           adminId: firebaseUser.uid,
         });
@@ -283,14 +302,16 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
       setLoading(false);
       toast({
         title: 'Content Added!',
-        description: `New topic "${topicName}" is ready for review.`,
+        description: `New content for "${topicName}" is ready for review.`,
       });
       onContentAdded(); // Callback to refetch topics
       setOpen(false); // Close dialog on success
       // Reset form state
-      setTopicName('');
+      setNewTopicName('');
       setTextContent('');
       setFiles(null);
+      setTopicSelection('existing');
+      if(topics.length > 0) setSelectedTopicId(topics[0].id);
 
     } catch (error: any) {
       console.error('Failed to generate content:', error);
@@ -317,19 +338,37 @@ function AddContentDialog({ courseId, onContentAdded }: { courseId: string, onCo
           <DialogHeader>
             <DialogTitle>Add New Content to Course</DialogTitle>
             <DialogDescription>
-              Create a new topic and provide materials. The AI will generate flashcards and questions.
+              Provide materials and choose a topic. The AI will generate flashcards and questions.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="topic-name">New Topic Name</Label>
-              <Input
-                id="topic-name"
-                placeholder="e.g., Photosynthesis"
-                required
-                value={topicName}
-                onChange={(e) => setTopicName(e.target.value)}
-              />
+             <div className="space-y-2">
+                <Label>Topic</Label>
+                <Tabs value={topicSelection} onValueChange={setTopicSelection}>
+                    <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="existing" disabled={topics.length === 0}>Add to Existing Topic</TabsTrigger>
+                        <TabsTrigger value="new">Create New Topic</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="existing" className="pt-2">
+                         <Select onValueChange={setSelectedTopicId} defaultValue={selectedTopicId} disabled={topics.length === 0}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select an existing topic" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {topics.map(t => (
+                                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </TabsContent>
+                    <TabsContent value="new" className="pt-2">
+                         <Input
+                            placeholder="e.g., Photosynthesis"
+                            value={newTopicName}
+                            onChange={(e) => setNewTopicName(e.target.value)}
+                        />
+                    </TabsContent>
+                </Tabs>
             </div>
              <div className="space-y-2">
               <Label htmlFor="materials">
@@ -853,7 +892,7 @@ export default function AdminCourseReviewPage() {
           </p>
         </div>
         <div className="flex gap-2">
-            <AddContentDialog courseId={courseId} onContentAdded={handleContentRefresh} />
+            <AddContentDialog courseId={courseId} topics={topics || []} onContentAdded={handleContentRefresh} />
             {course && <EditCourseDialog course={course} courseId={courseId} />}
             <Button onClick={handlePublish}>
                 {course?.status === 'published' ? <XCircle className="mr-2 h-4 w-4" /> : <CheckCircle className="mr-2 h-4 w-4" />}
