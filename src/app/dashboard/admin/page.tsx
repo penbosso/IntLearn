@@ -29,7 +29,7 @@ import { getCurrentUser, User } from '@/lib/auth';
 
 
 export default function AdminDashboardPage() {
-  const { user: firebaseUser } = useUser();
+  const { user: firebaseUser, isUserLoading: isFirebaseUserLoading } = useUser();
   const [user, setUser] = useState<User | null>(null);
   const firestore = useFirestore();
 
@@ -66,14 +66,7 @@ export default function AdminDashboardPage() {
 
   const isLoading = areCoursesLoading || areStudentsLoading || !user;
 
-  const creatorsQuery = useMemoFirebase(
-    () => (firestore ? query(collection(firestore, 'users'), where('role', '==', 'creator')) : null),
-    [firestore]
-  );
-  const { data: creators, isLoading: areCreatorsLoading } = useCollection(creatorsQuery);
-  const totalContentCreators = useMemo(() => creators?.length || 0, [creators]);
-
-  if (isLoading || areCreatorsLoading) {
+  if (isLoading || isFirebaseUserLoading) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -128,12 +121,12 @@ export default function AdminDashboardPage() {
         </Card>
         <Card>
            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Content Creators</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Student Engagement</CardTitle>
+            <BarChart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalContentCreators}</div>
-            <p className="text-xs text-muted-foreground">Users with creator permissions</p>
+             <div className="text-2xl font-bold">...</div>
+             <p className="text-xs text-muted-foreground">Quiz attempts this week</p>
           </CardContent>
         </Card>
       </div>
@@ -193,6 +186,4 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
-    
-
     
