@@ -24,6 +24,9 @@ export type Flashcard = {
   front: string;
   back: string;
   status: 'needs-review' | 'approved' | 'flagged';
+  flaggedComment?: string;
+  flaggedBy?: string;
+  flaggedAt?: any;
 };
 
 export type FlashcardMastery = {
@@ -45,6 +48,9 @@ export type Question = {
   options?: string[];
   answer: string;
   status: 'needs-review' | 'approved' | 'flagged';
+  flaggedComment?: string;
+  flaggedBy?: string;
+  flaggedAt?: any;
 };
 
 export type QuizAttempt = {

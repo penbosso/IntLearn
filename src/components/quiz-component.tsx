@@ -12,12 +12,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { Check, X, Repeat, Trophy, SkipForward, Loader2, Flag } from 'lucide-react';
 import { useFirestore, useUser } from '@/firebase';
-import { collection, runTransaction, doc, Timestamp, updateDoc } from 'firebase/firestore';
+import { collection, runTransaction, doc, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useParams, useSearchParams } from 'next/navigation';
 import { differenceInCalendarDays } from 'date-fns';
 import { awardBadges } from '@/lib/badges/badge-engine';
 import { evaluateAnswer } from '@/ai/flows/evaluate-answer-flow';
+import { FlagContentDialog } from '@/components/flag-content-dialog';
 
 type AnswerState = 'unanswered' | 'correct' | 'incorrect';
 
@@ -228,24 +229,6 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
     setShowResults(false);
     setShortAnswerText('');
   };
-
-    const handleFlag = async () => {
-        if (!currentQuestion || !topicId || !courseId) return;
-        const questionRef = doc(firestore, `courses/${courseId}/topics/${topicId}/questions`, currentQuestion.id);
-        try {
-            await updateDoc(questionRef, { status: 'flagged' });
-            toast({
-                title: 'Content Flagged',
-                description: 'Thank you for your feedback. An admin will review this question.',
-            });
-        } catch (error) {
-            toast({
-                variant: 'destructive',
-                title: 'Error',
-                description: 'Could not flag question.',
-            });
-        }
-    };
   
   useEffect(() => {
     if (answerState !== 'unanswered') {
@@ -371,9 +354,16 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
         )}
 
          <div className="mt-4 text-right">
-             <Button variant="ghost" size="sm" onClick={handleFlag} disabled={answerState !== 'unanswered'}>
-                <Flag className="mr-2 h-4 w-4" /> Flag Question
-            </Button>
+             <FlagContentDialog
+                contentType="question"
+                contentId={currentQuestion.id}
+                courseId={courseId}
+                topicId={topicId || ''}
+             >
+                <Button variant="ghost" size="sm" disabled={answerState !== 'unanswered'}>
+                    <Flag className="mr-2 h-4 w-4" /> Flag Question
+                </Button>
+             </FlagContentDialog>
         </div>
 
       </CardContent>

@@ -12,6 +12,7 @@ import { useFirestore, useUser } from '@/firebase';
 import { doc, runTransaction, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
+import { FlagContentDialog } from '@/components/flag-content-dialog';
 
 const MASTERY_STREAK_THRESHOLD = 3;
 
@@ -105,24 +106,6 @@ export default function FlashcardDeck({ flashcards: initialFlashcards }: { flash
     setKnownCards([]);
   };
 
-  const handleFlag = async () => {
-    if (!currentFlashcard || !topicId || !courseId) return;
-    const flashcardRef = doc(firestore, `courses/${courseId}/topics/${topicId}/flashcards`, currentFlashcard.id);
-    try {
-        await updateDoc(flashcardRef, { status: 'flagged' });
-        toast({
-            title: 'Content Flagged',
-            description: 'Thank you for your feedback. An admin will review this content.',
-        });
-    } catch (error) {
-        toast({
-            variant: 'destructive',
-            title: 'Error',
-            description: 'Could not flag content.',
-        });
-    }
-  };
-
   if (completed) {
     return (
         <Card className="w-full max-w-lg text-center p-8">
@@ -177,9 +160,16 @@ export default function FlashcardDeck({ flashcards: initialFlashcards }: { flash
 
         <div className="flex justify-between items-center text-sm text-muted-foreground">
             <span>Click card to flip</span>
-            <Button variant="ghost" size="sm" onClick={handleFlag}>
-                <Flag className="mr-2 h-4 w-4" /> Flag for Review
-            </Button>
+            <FlagContentDialog
+                contentType="flashcard"
+                contentId={currentFlashcard.id}
+                courseId={courseId}
+                topicId={topicId || ''}
+            >
+                <Button variant="ghost" size="sm">
+                    <Flag className="mr-2 h-4 w-4" /> Flag for Review
+                </Button>
+            </FlagContentDialog>
         </div>
 
         <div className="flex justify-around gap-4 pt-4">

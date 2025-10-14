@@ -53,7 +53,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Check, CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2, XCircle, File as FileIcon, ChevronDown, Settings, Flag } from 'lucide-react';
+import { Check, CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2, XCircle, File as FileIcon, ChevronDown, Settings, Flag, MessageSquare } from 'lucide-react';
 import { useCollection, useDoc, useMemoFirebase, useAuth, useFirestore, useUser } from '@/firebase';
 import { doc, collection, query, writeBatch, serverTimestamp, deleteDoc, updateDoc, getDoc, setDoc, addDoc } from 'firebase/firestore';
 import {
@@ -67,6 +67,12 @@ import { useToast } from '@/hooks/use-toast';
 import { generateFlashcardsAndQuestions } from '@/ai/flows/generate-flashcards-and-questions';
 import { getCurrentUser } from '@/lib/auth';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 
 // Helper to read file as a data URL
@@ -1021,6 +1027,7 @@ export default function AdminCourseReviewPage() {
               </div>
             </CardHeader>
             <CardContent>
+              <TooltipProvider>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1063,9 +1070,18 @@ export default function AdminCourseReviewPage() {
                         <TableCell className="font-medium max-w-xs truncate">{fc.front}</TableCell>
                         <TableCell className="max-w-xs truncate">{fc.back}</TableCell>
                         <TableCell>
-                           <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${getStatusBadge(fc.status)}`}>
-                                {fc.status === 'flagged' && <Flag className="inline-block h-3 w-3 mr-1" />}
+                           <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize flex items-center gap-1 ${getStatusBadge(fc.status)}`}>
                                 {fc.status.replace('-', ' ')}
+                                {fc.status === 'flagged' && fc.flaggedComment && (
+                                    <Tooltip>
+                                        <TooltipTrigger>
+                                            <MessageSquare className="h-4 w-4 cursor-pointer" />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>{fc.flaggedComment}</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                )}
                             </span>
                         </TableCell>
                         <TableCell className="text-right space-x-1">
@@ -1106,6 +1122,7 @@ export default function AdminCourseReviewPage() {
                   )}
                 </TableBody>
               </Table>
+              </TooltipProvider>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1139,6 +1156,7 @@ export default function AdminCourseReviewPage() {
               </div>
             </CardHeader>
             <CardContent>
+             <TooltipProvider>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1181,9 +1199,18 @@ export default function AdminCourseReviewPage() {
                         <TableCell className="font-medium max-w-sm truncate">{q.text}</TableCell>
                         <TableCell>{q.type}</TableCell>
                         <TableCell>
-                           <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${getStatusBadge(q.status)}`}>
-                                {q.status === 'flagged' && <Flag className="inline-block h-3 w-3 mr-1" />}
+                           <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize flex items-center gap-1 ${getStatusBadge(q.status)}`}>
                                 {q.status.replace('-', ' ')}
+                                {q.status === 'flagged' && q.flaggedComment && (
+                                    <Tooltip>
+                                        <TooltipTrigger>
+                                            <MessageSquare className="h-4 w-4 cursor-pointer" />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>{q.flaggedComment}</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                )}
                             </span>
                         </TableCell>
                         <TableCell className="text-right space-x-1">
@@ -1224,6 +1251,7 @@ export default function AdminCourseReviewPage() {
                   )}
                 </TableBody>
               </Table>
+              </TooltipProvider>
             </CardContent>
           </Card>
         </TabsContent>

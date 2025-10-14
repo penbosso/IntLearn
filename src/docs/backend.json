@@ -131,6 +131,19 @@
         "back": {
           "type": "string",
           "description": "The back side of the flashcard (answer or explanation)."
+        },
+        "flaggedComment": {
+          "type": "string",
+          "description": "Comment provided by a student when flagging the content."
+        },
+        "flaggedBy": {
+          "type": "string",
+          "description": "ID of the user who flagged the content."
+        },
+        "flaggedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the content was flagged."
         }
       },
       "required": [
@@ -215,6 +228,19 @@
           "items": {
             "type": "string"
           }
+        },
+        "flaggedComment": {
+          "type": "string",
+          "description": "Comment provided by a student when flagging the content."
+        },
+        "flaggedBy": {
+          "type": "string",
+          "description": "ID of the user who flagged the content."
+        },
+        "flaggedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the content was flagged."
         }
       },
       "required": [
