@@ -13,6 +13,7 @@ import {
   LogOut,
   BrainCircuit,
   PlusCircle,
+  Users,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -55,6 +56,7 @@ const navItems: NavItem[] = [
   { href: '/dashboard/performance', label: 'Performance', icon: BarChart3, roles: ['student'] },
   { href: '/dashboard/leaderboard', label: 'Leaderboard', icon: Trophy, roles: ['student'] },
   { href: '/dashboard/admin', label: 'Admin', icon: Shield, roles: ['admin'] },
+  { href: '/dashboard/admin/students', label: 'Students', icon: Users, roles: ['admin'] },
   { href: '/dashboard/admin/new', label: 'Create Course', icon: PlusCircle, roles: ['admin', 'creator'] },
 ];
 
@@ -135,7 +137,7 @@ export default function DashboardLayout({
         <header className="flex h-16 items-center justify-between gap-4 border-b px-6">
           <div className='flex items-center gap-2'>
             <SidebarTrigger className="md:hidden" />
-            <h1 className="text-lg font-semibold">{navItems.find(item => item.href === pathname)?.label || 'Dashboard'}</h1>
+            <h1 className="text-lg font-semibold">{navItems.find(item => pathname.startsWith(item.href))?.label || 'Dashboard'}</h1>
           </div>
           <UserNav user={user} onLogout={handleLogout} />
         </header>
@@ -185,5 +187,3 @@ function UserNav({ user, onLogout }: { user: User | null, onLogout: () => void }
     </DropdownMenu>
   );
 }
-
-    

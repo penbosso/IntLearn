@@ -47,7 +47,7 @@ export default function AdminDashboardPage() {
   const { data: courses, isLoading: areCoursesLoading } = useCollection<Course>(coursesQuery);
 
   const studentsQuery = useMemoFirebase(
-    () => firestore ? query(collection(firestore, 'users'), where('role', '==', 'student')) : null,
+    () => firestore ? query(collection(firestore, 'users'), where('role', 'in', ['student', 'creator'])) : null,
     [firestore]
   );
   const { data: students, isLoading: areStudentsLoading } = useCollection<User>(studentsQuery);
@@ -114,7 +114,11 @@ export default function AdminDashboardPage() {
             {areStudentsLoading ? <Loader2 className="h-6 w-6 animate-spin"/> :
                 <>
                     <div className="text-2xl font-bold">{students?.length || 0}</div>
-                    <p className="text-xs text-muted-foreground">Total students on the platform</p>
+                    <p className="text-xs text-muted-foreground">
+                        <Link href="/dashboard/admin/students" className="hover:underline">
+                            View and manage students
+                        </Link>
+                    </p>
                 </>
             }
           </CardContent>
