@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useEffect, useState } from 'react';
@@ -52,7 +53,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Check, CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2, XCircle, File as FileIcon, ChevronDown, Settings } from 'lucide-react';
+import { Check, CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2, XCircle, File as FileIcon, ChevronDown, Settings, Flag } from 'lucide-react';
 import { useCollection, useDoc, useMemoFirebase, useAuth, useFirestore, useUser } from '@/firebase';
 import { doc, collection, query, writeBatch, serverTimestamp, deleteDoc, updateDoc, getDoc, setDoc, addDoc } from 'firebase/firestore';
 import {
@@ -867,6 +868,8 @@ export default function AdminCourseReviewPage() {
             return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
         case 'needs-review':
             return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+        case 'flagged':
+            return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
         default:
             return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
     }
@@ -1061,6 +1064,7 @@ export default function AdminCourseReviewPage() {
                         <TableCell className="max-w-xs truncate">{fc.back}</TableCell>
                         <TableCell>
                            <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${getStatusBadge(fc.status)}`}>
+                                {fc.status === 'flagged' && <Flag className="inline-block h-3 w-3 mr-1" />}
                                 {fc.status.replace('-', ' ')}
                             </span>
                         </TableCell>
@@ -1178,6 +1182,7 @@ export default function AdminCourseReviewPage() {
                         <TableCell>{q.type}</TableCell>
                         <TableCell>
                            <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${getStatusBadge(q.status)}`}>
+                                {q.status === 'flagged' && <Flag className="inline-block h-3 w-3 mr-1" />}
                                 {q.status.replace('-', ' ')}
                             </span>
                         </TableCell>

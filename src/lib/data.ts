@@ -23,7 +23,7 @@ export type Flashcard = {
   topicId: string;
   front: string;
   back: string;
-  status: 'needs-review' | 'approved';
+  status: 'needs-review' | 'approved' | 'flagged';
 };
 
 export type FlashcardMastery = {
@@ -44,7 +44,7 @@ export type Question = {
   type: 'MCQ' | 'True/False' | 'Short Answer';
   options?: string[];
   answer: string;
-  status: 'needs-review' | 'approved';
+  status: 'needs-review' | 'approved' | 'flagged';
 };
 
 export type QuizAttempt = {

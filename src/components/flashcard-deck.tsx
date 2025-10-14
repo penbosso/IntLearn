@@ -1,14 +1,15 @@
+
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Check, X, Repeat } from 'lucide-react';
+import { Check, X, Repeat, Flag } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Flashcard } from '@/lib/data';
 import { useFirestore, useUser } from '@/firebase';
-import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { doc, runTransaction, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 
@@ -104,6 +105,24 @@ export default function FlashcardDeck({ flashcards: initialFlashcards }: { flash
     setKnownCards([]);
   };
 
+  const handleFlag = async () => {
+    if (!currentFlashcard || !topicId || !courseId) return;
+    const flashcardRef = doc(firestore, `courses/${courseId}/topics/${topicId}/flashcards`, currentFlashcard.id);
+    try {
+        await updateDoc(flashcardRef, { status: 'flagged' });
+        toast({
+            title: 'Content Flagged',
+            description: 'Thank you for your feedback. An admin will review this content.',
+        });
+    } catch (error) {
+        toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: 'Could not flag content.',
+        });
+    }
+  };
+
   if (completed) {
     return (
         <Card className="w-full max-w-lg text-center p-8">
@@ -156,8 +175,11 @@ export default function FlashcardDeck({ flashcards: initialFlashcards }: { flash
           </div>
         </div>
 
-        <div className="text-center text-sm text-muted-foreground">
-          Click card to flip
+        <div className="flex justify-between items-center text-sm text-muted-foreground">
+            <span>Click card to flip</span>
+            <Button variant="ghost" size="sm" onClick={handleFlag}>
+                <Flag className="mr-2 h-4 w-4" /> Flag for Review
+            </Button>
         </div>
 
         <div className="flex justify-around gap-4 pt-4">
