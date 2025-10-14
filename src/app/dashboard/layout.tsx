@@ -55,7 +55,7 @@ const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Courses', icon: BookOpen, roles: ['student'] },
   { href: '/dashboard/performance', label: 'Performance', icon: BarChart3, roles: ['student'] },
   { href: '/dashboard/leaderboard', label: 'Leaderboard', icon: Trophy, roles: ['student'] },
-  { href: '/dashboard/admin', label: 'Admin', icon: Shield, roles: ['admin'] },
+  { href: '/dashboard/admin', label: 'Admin', icon: Shield, roles: ['admin', 'creator'] },
   { href: '/dashboard/admin/users', label: 'Users', icon: Users, roles: ['admin'] },
   { href: '/dashboard/admin/new', label: 'Create Course', icon: PlusCircle, roles: ['admin', 'creator'] },
 ];
