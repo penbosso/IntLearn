@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useDoc, useCollection, useMemoFirebase, useFirestore, useUser } from '@/firebase';
-import { doc, collection, query, where } from 'firebase/firestore';
+import { doc, collection, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import type { Flashcard, FlashcardMastery } from '@/lib/data';
@@ -18,42 +18,57 @@ export default function FlashcardsPage() {
   const searchParams = useSearchParams();
   const courseId = params.courseId as string;
   const topicId = searchParams.get('topic');
+  const sessionLimit = parseInt(searchParams.get('limit') || '10', 10);
   const firestore = useFirestore();
   const { user } = useUser();
   const [hideMastered, setHideMastered] = useState(false);
 
-
+  // References
   const topicRef = useMemoFirebase(() => firestore && topicId ? doc(firestore, `courses/${courseId}/topics`, topicId) : null, [firestore, courseId, topicId]);
-  const flashcardsQuery = useMemoFirebase(() => firestore && topicId ? query(collection(firestore, `courses/${courseId}/topics/${topicId}/flashcards`), where('status', '==', 'approved')) : null, [firestore, courseId, topicId]);
-  const masteryQuery = useMemoFirebase(() => firestore && user && topicId ? query(collection(firestore, `users/${user.uid}/flashcardMastery`), where('topicId', '==', topicId), where('status', '==', 'mastered')) : null, [firestore, user, topicId]);
+  const allFlashcardsQuery = useMemoFirebase(() => firestore && topicId ? query(collection(firestore, `courses/${courseId}/topics/${topicId}/flashcards`), where('status', '==', 'approved')) : null, [firestore, courseId, topicId]);
+  const allMasteryQuery = useMemoFirebase(() => firestore && user && topicId ? query(collection(firestore, `users/${user.uid}/flashcardMastery`), where('topicId', '==', 'topicId')) : null, [firestore, user, topicId]);
 
+  // Data fetching
   const { data: topic, isLoading: isTopicLoading } = useDoc(topicRef);
-  const { data: flashcards, isLoading: areFlashcardsLoading } = useCollection<Flashcard>(flashcardsQuery);
-  const { data: masteredCards, isLoading: areMasteryCardsLoading } = useCollection<FlashcardMastery>(masteryQuery);
+  const { data: allFlashcards, isLoading: areAllFlashcardsLoading } = useCollection<Flashcard>(allFlashcardsQuery);
+  const { data: allMasteryData, isLoading: areMasteryCardsLoading } = useCollection<FlashcardMastery>(allMasteryQuery);
+
+  const [sessionFlashcards, setSessionFlashcards] = useState<Flashcard[]>([]);
+
+  useEffect(() => {
+    if (allFlashcards && allMasteryData) {
+      const masteryMap = new Map<string, FlashcardMastery>(allMasteryData.map(m => [m.flashcardId, m]));
+      
+      let flashcardsToConsider = allFlashcards;
+      if (hideMastered) {
+          flashcardsToConsider = allFlashcards.filter(fc => masteryMap.get(fc.id)?.status !== 'mastered');
+      }
+
+      // Sort by least recently reviewed
+      const sorted = [...flashcardsToConsider].sort((a, b) => {
+          const masteryA = masteryMap.get(a.id);
+          const masteryB = masteryMap.get(b.id);
+
+          const timeA = masteryA?.lastReviewed instanceof Timestamp ? masteryA.lastReviewed.toMillis() : 0;
+          const timeB = masteryB?.lastReviewed instanceof Timestamp ? masteryB.lastReviewed.toMillis() : 0;
+          
+          return timeA - timeB; // Ascending order: oldest first
+      });
+
+      setSessionFlashcards(sorted.slice(0, sessionLimit));
+    } else if (allFlashcards) {
+        // If mastery data is not available yet, just take a random slice
+        const shuffled = [...allFlashcards].sort(() => Math.random() - 0.5);
+        setSessionFlashcards(shuffled.slice(0, sessionLimit));
+    }
+  }, [allFlashcards, allMasteryData, sessionLimit, hideMastered]);
+  
 
   if (!topicId) {
       notFound();
   }
   
-  // Use state to hold the shuffled flashcards so they don't re-shuffle on re-renders
-  const [shuffledFlashcards, setShuffledFlashcards] = useState<Flashcard[]>([]);
-
-  useEffect(() => {
-    if (flashcards) {
-      setShuffledFlashcards([...flashcards].sort(() => Math.random() - 0.5));
-    }
-  }, [flashcards]);
-
-
-  const filteredFlashcards = useMemo(() => {
-    if (!shuffledFlashcards) return [];
-    if (!hideMastered || !masteredCards) return shuffledFlashcards;
-    const masteredIds = new Set(masteredCards.map(c => c.flashcardId));
-    return shuffledFlashcards.filter(fc => !masteredIds.has(fc.id));
-  }, [shuffledFlashcards, masteredCards, hideMastered]);
-
-
-  const isLoading = isTopicLoading || areFlashcardsLoading || areMasteryCardsLoading;
+  const isLoading = isTopicLoading || areAllFlashcardsLoading || areMasteryCardsLoading;
 
   if (isLoading) {
       return (
@@ -78,7 +93,7 @@ export default function FlashcardsPage() {
               </Link>
           </Button>
           <h1 className="text-3xl font-bold font-headline">{topic?.name || 'Flashcards'}</h1>
-          <p className="text-muted-foreground">Review the key concepts for this topic.</p>
+          <p className="text-muted-foreground">Reviewing {sessionFlashcards.length} of {allFlashcards?.length || 0} cards.</p>
         </div>
          <div className="flex items-center space-x-2">
             <Switch id="hide-mastered" checked={hideMastered} onCheckedChange={setHideMastered} />
@@ -86,15 +101,15 @@ export default function FlashcardsPage() {
         </div>
       </div>
       <div className="flex-grow flex items-center justify-center">
-        {filteredFlashcards && filteredFlashcards.length > 0 ? (
-          <FlashcardDeck flashcards={filteredFlashcards} />
+        {sessionFlashcards.length > 0 ? (
+          <FlashcardDeck flashcards={sessionFlashcards} />
         ) : (
           <div className="text-center">
             <h2 className="text-xl font-semibold">
-              {hideMastered && flashcards && flashcards.length > 0 ? 'Everything Mastered!' : 'No Flashcards Yet'}
+              {hideMastered && allFlashcards && allFlashcards.length > 0 ? 'Everything Mastered!' : 'No Flashcards Available'}
             </h2>
             <p className="text-muted-foreground">
-              {hideMastered && flashcards && flashcards.length > 0 ? 'You\'ve mastered all cards for this topic. Toggle the switch to review them all.' : 'There are no approved flashcards available for this topic.'}
+              {hideMastered && allFlashcards && allFlashcards.length > 0 ? 'You\'ve mastered all cards for this topic. Toggle the switch to review them all.' : 'There are no approved flashcards available for this topic.'}
             </p>
           </div>
         )}

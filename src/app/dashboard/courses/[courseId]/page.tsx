@@ -17,11 +17,128 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
-import { Book, Edit, Loader2 } from 'lucide-react';
+import { Book, Edit, Loader2, FileText, BrainCircuit } from 'lucide-react';
 import { useDoc, useCollection, useMemoFirebase, useFirestore } from '@/firebase';
-import { doc, collection } from 'firebase/firestore';
+import { doc, collection, query, where } from 'firebase/firestore';
 import { useCourseProgress } from '@/hooks/use-course-progress';
 import { useEffect, useState } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import type { Topic, Flashcard, Question } from '@/lib/data';
+import { useRouter } from 'next/navigation';
+
+function StartSessionDialog({ topic, courseId, children }: { topic: Topic, courseId: string, children: React.ReactNode }) {
+  const firestore = useFirestore();
+  const router = useRouter();
+
+  const flashcardsQuery = useMemoFirebase(() => firestore ? query(collection(firestore, `courses/${courseId}/topics/${topic.id}/flashcards`), where('status', '==', 'approved')) : null, [firestore, courseId, topic.id]);
+  const questionsQuery = useMemoFirebase(() => firestore ? query(collection(firestore, `courses/${courseId}/topics/${topic.id}/questions`), where('status', '==', 'approved')) : null, [firestore, courseId, topic.id]);
+
+  const { data: flashcards, isLoading: areFlashcardsLoading } = useCollection<Flashcard>(flashcardsQuery);
+  const { data: questions, isLoading: areQuestionsLoading } = useCollection<Question>(questionsQuery);
+
+  const [flashcardCount, setFlashcardCount] = useState(10);
+  const [questionCount, setQuestionCount] = useState(10);
+
+  const totalFlashcards = flashcards?.length || 0;
+  const totalQuestions = questions?.length || 0;
+
+  const handleStartFlashcards = () => {
+    const count = Math.min(flashcardCount, totalFlashcards);
+    router.push(`/dashboard/courses/${courseId}/flashcards?topic=${topic.id}&limit=${count}`);
+  };
+
+  const handleStartQuiz = () => {
+    const count = Math.min(questionCount, totalQuestions);
+    router.push(`/dashboard/courses/${courseId}/quiz?topic=${topic.id}&limit=${count}`);
+  };
+
+  const isLoading = areFlashcardsLoading || areQuestionsLoading;
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>{children}</DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Start a Study Session</DialogTitle>
+          <DialogDescription>
+            Choose how many items you want to review for the topic: <strong>{topic.name}</strong>.
+          </DialogDescription>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="flex justify-center items-center h-24">
+            <Loader2 className="h-6 w-6 animate-spin" />
+          </div>
+        ) : (
+          <div className="space-y-6 pt-4">
+            {totalFlashcards > 0 && (
+              <div className="flex items-center justify-between gap-4 p-4 border rounded-lg">
+                <div className="space-y-1">
+                  <h3 className="font-semibold flex items-center gap-2"><FileText className="h-5 w-5 text-primary" />Flashcards</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {totalFlashcards} cards available.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min="1"
+                    max={totalFlashcards}
+                    value={flashcardCount}
+                    onChange={(e) => setFlashcardCount(Math.max(1, parseInt(e.target.value, 10)))}
+                    className="w-20"
+                  />
+                  <DialogClose asChild>
+                    <Button onClick={handleStartFlashcards} disabled={totalFlashcards === 0}>Start</Button>
+                  </DialogClose>
+                </div>
+              </div>
+            )}
+
+            {totalQuestions > 0 && (
+              <div className="flex items-center justify-between gap-4 p-4 border rounded-lg">
+                 <div className="space-y-1">
+                  <h3 className="font-semibold flex items-center gap-2"><BrainCircuit className="h-5 w-5 text-accent" />Quiz</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {totalQuestions} questions available.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min="1"
+                    max={totalQuestions}
+                    value={questionCount}
+                    onChange={(e) => setQuestionCount(Math.max(1, parseInt(e.target.value, 10)))}
+                    className="w-20"
+                  />
+                  <DialogClose asChild>
+                    <Button onClick={handleStartQuiz} disabled={totalQuestions === 0}>Start</Button>
+                  </DialogClose>
+                </div>
+              </div>
+            )}
+
+            {(totalFlashcards === 0 && totalQuestions === 0) && (
+                 <p className="text-center text-muted-foreground py-8">No approved flashcards or questions are available for this topic yet.</p>
+            )}
+
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 
 export default function CourseDetailPage() {
@@ -103,18 +220,12 @@ export default function CourseDetailPage() {
                     <AccordionContent className="px-6 bg-secondary/50">
                        <p className="text-muted-foreground mb-4 pt-4">Ready to master this topic? Choose your study method.</p>
                        <div className="flex gap-4">
-                            <Button asChild>
-                                <Link href={`/dashboard/courses/${courseId}/flashcards?topic=${topic.id}`}>
+                            <StartSessionDialog topic={topic} courseId={courseId}>
+                                <Button>
                                     <Book className="mr-2 h-4 w-4" />
-                                    Study Flashcards
-                                </Link>
-                            </Button>
-                             <Button asChild variant="outline">
-                                <Link href={`/dashboard/courses/${courseId}/quiz?topic=${topic.id}`}>
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    Start Quiz
-                                </Link>
-                            </Button>
+                                    Study Session
+                                </Button>
+                            </StartSessionDialog>
                        </div>
                     </AccordionContent>
                   </AccordionItem>
