@@ -107,7 +107,7 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
             });
 
             // 3. Award Badges (pass transaction to engine)
-            const newBadges = await awardBadges(transaction, {
+            const newBadges = await awardBadges(transaction, firestore, {
               userId: user.uid,
               topicId,
               score: percentage,

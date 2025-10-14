@@ -20,11 +20,13 @@ type BadgeContext = {
 /**
  * Checks for and awards new badges to a user within a Firestore transaction.
  * @param transaction The Firestore transaction to use for database operations.
+ * @param firestore The Firestore instance.
  * @param context The context of the event that could trigger a badge.
  * @returns A promise that resolves with an array of newly awarded badges.
  */
 export async function awardBadges(
   transaction: Transaction,
+  firestore: Firestore,
   context: BadgeContext
 ): Promise<Badge[]> {
   const { userId, score } = context;
@@ -35,7 +37,7 @@ export async function awardBadges(
 
   // Get all badges the user has already earned
   const userBadgesRef = collection(
-    transaction.firestore,
+    firestore,
     `users/${userId}/userBadges`
   );
   // We need to perform this read *before* the transaction to know what to write.
