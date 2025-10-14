@@ -26,6 +26,7 @@ import { useUser } from '@/firebase';
 import AdminAnalyticsChart from '@/components/admin-analytics-chart';
 import { useEffect, useState, useMemo } from 'react';
 import { getCurrentUser, User } from '@/lib/auth';
+import { subDays } from 'date-fns';
 
 
 export default function AdminDashboardPage() {
@@ -52,6 +53,18 @@ export default function AdminDashboardPage() {
   );
   const { data: students, isLoading: areStudentsLoading } = useCollection<User>(studentsQuery);
 
+  const allAttemptsQuery = useMemoFirebase(
+    () => (firestore ? query(collectionGroup(firestore, 'quizAttempts')) : null),
+    [firestore]
+  );
+  const { data: allAttempts, isLoading: areAttemptsLoading } = useCollection<QuizAttempt>(allAttemptsQuery);
+
+  const weeklyQuizAttempts = useMemo(() => {
+    if (!allAttempts) return 0;
+    const oneWeekAgo = subDays(new Date(), 7);
+    return allAttempts.filter(attempt => attempt.attemptedDate.toDate() > oneWeekAgo).length;
+  }, [allAttempts]);
+
 
   const getStatusBadge = (status?: string) => {
     switch (status) {
@@ -64,7 +77,7 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const isLoading = areCoursesLoading || areStudentsLoading || !user;
+  const isLoading = areCoursesLoading || areStudentsLoading || !user || areAttemptsLoading;
 
   if (isLoading || isFirebaseUserLoading) {
     return (
@@ -129,8 +142,12 @@ export default function AdminDashboardPage() {
             <BarChart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-             <div className="text-2xl font-bold">...</div>
-             <p className="text-xs text-muted-foreground">Quiz attempts this week</p>
+             {areAttemptsLoading ? <Loader2 className="h-6 w-6 animate-spin"/> :
+                <>
+                    <div className="text-2xl font-bold">{weeklyQuizAttempts}</div>
+                    <p className="text-xs text-muted-foreground">Quiz attempts this week</p>
+                </>
+             }
           </CardContent>
         </Card>
       </div>
