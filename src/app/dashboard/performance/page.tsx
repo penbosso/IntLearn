@@ -37,13 +37,17 @@ export default function PerformancePage() {
         firestore
           ? query(
               collection(firestore, 'users'),
-              orderBy('xp', 'desc'),
               where('xp', '>', 0) // Only show users with XP
             )
           : null,
       [firestore]
     );
     const { data: leaderboardData, isLoading: isLeaderboardLoading } = useCollection<User>(leaderboardQuery);
+    
+    const sortedLeaderboard = useMemo(() => {
+        if (!leaderboardData) return [];
+        return [...leaderboardData].sort((a, b) => (b.xp || 0) - (a.xp || 0));
+    }, [leaderboardData]);
 
     // Fetch user's quiz attempts
     const attemptsQuery = useMemoFirebase(
@@ -162,7 +166,7 @@ export default function PerformancePage() {
               {isLeaderboardLoading && (
                  <TableRow><TableCell colSpan={3} className="text-center">Loading leaderboard...</TableCell></TableRow>
               )}
-              {leaderboardData?.map((user, index) => (
+              {sortedLeaderboard?.map((user, index) => (
                 <TableRow key={user.id}>
                   <TableCell className="font-medium text-lg">{index + 1}</TableCell>
                   <TableCell>
@@ -180,7 +184,7 @@ export default function PerformancePage() {
                   <TableCell className="text-right font-bold text-lg">{(user.xp || 0).toLocaleString()}</TableCell>
                 </TableRow>
               ))}
-               {!isLeaderboardLoading && leaderboardData?.length === 0 && (
+               {!isLeaderboardLoading && sortedLeaderboard?.length === 0 && (
                   <TableRow><TableCell colSpan={3} className="text-center">No students with XP on the leaderboard yet.</TableCell></TableRow>
                )}
             </TableBody>
