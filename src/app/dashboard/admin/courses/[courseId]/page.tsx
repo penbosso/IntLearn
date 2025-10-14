@@ -871,6 +871,33 @@ export default function AdminCourseReviewPage() {
             return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
     }
   };
+  
+  const handleDeleteTopic = async () => {
+    if (!topicId || (flashcards && flashcards.length > 0) || (questions && questions.length > 0)) {
+        toast({
+            variant: 'destructive',
+            title: 'Deletion Failed',
+            description: 'Cannot delete a topic that still contains content.',
+        });
+        return;
+    }
+    
+    try {
+        const topicRef = doc(firestore, `courses/${courseId}/topics`, topicId);
+        await deleteDoc(topicRef);
+        toast({
+            title: 'Topic Deleted',
+            description: 'The empty topic has been successfully deleted.',
+        });
+        handleContentRefresh(); // This will cause topics to refetch and a new one to be selected
+    } catch (error: any) {
+        toast({
+            variant: 'destructive',
+            title: 'Deletion Failed',
+            description: error.message || 'Could not delete the topic.',
+        });
+    }
+  };
 
   const topicOptions = useMemo(() => topics?.map(t => ({ value: t.id, label: t.name })) || [], [topics]);
 
@@ -910,6 +937,7 @@ export default function AdminCourseReviewPage() {
             {areTopicsLoading ? (
                 <p>Loading topics...</p>
             ) : topics && topics.length > 0 ? (
+                <>
                  <Select onValueChange={setTopicId} value={topicId || ''}>
                     <SelectTrigger className="w-full md:w-[300px]">
                         <SelectValue placeholder="Select a topic" />
@@ -920,6 +948,34 @@ export default function AdminCourseReviewPage() {
                         ))}
                     </SelectContent>
                 </Select>
+                 <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button 
+                        variant="destructive" 
+                        disabled={
+                            isContentLoading || 
+                            !topicId || 
+                            (flashcards && flashcards.length > 0) || 
+                            (questions && questions.length > 0)
+                        }>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete Topic
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This will permanently delete the topic "{topics.find(t => t.id === topicId)?.name}". This action cannot be undone.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDeleteTopic}>Delete</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+                </>
             ) : (
                 <p className="text-muted-foreground">No topics found.</p>
             )}
