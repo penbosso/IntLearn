@@ -56,7 +56,7 @@ const navItems: NavItem[] = [
   { href: '/dashboard/performance', label: 'Performance', icon: BarChart3, roles: ['student'] },
   { href: '/dashboard/leaderboard', label: 'Leaderboard', icon: Trophy, roles: ['student'] },
   { href: '/dashboard/admin', label: 'Admin', icon: Shield, roles: ['admin'] },
-  { href: '/dashboard/admin/students', label: 'Students', icon: Users, roles: ['admin'] },
+  { href: '/dashboard/admin/users', label: 'Users', icon: Users, roles: ['admin'] },
   { href: '/dashboard/admin/new', label: 'Create Course', icon: PlusCircle, roles: ['admin', 'creator'] },
 ];
 

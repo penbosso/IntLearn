@@ -107,7 +107,7 @@ export default function AdminDashboardPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Students</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -115,8 +115,8 @@ export default function AdminDashboardPage() {
                 <>
                     <div className="text-2xl font-bold">{students?.length || 0}</div>
                     <p className="text-xs text-muted-foreground">
-                        <Link href="/dashboard/admin/students" className="hover:underline">
-                            View and manage students
+                        <Link href="/dashboard/admin/users" className="hover:underline">
+                            View and manage users
                         </Link>
                     </p>
                 </>
