@@ -15,6 +15,7 @@ import {
 import type { Topic, QuizAttempt } from '@/lib/data';
 
 const PASSING_THRESHOLD = 70; // 70%
+const SIGNIFICANT_QUIZ_THRESHOLD = 0.5; // Quiz must have at least 50% of total topic questions
 
 /**
  * A custom hook to calculate a user's progress for a specific course.
@@ -54,31 +55,33 @@ export function useCourseProgress(courseId: string | null) {
 
   // 4. Memoize the calculation of progress
   const { progress, completedTopics } = useMemo(() => {
-    if (isLoading || !topics || !quizAttempts) {
+    if (isLoading || !topics || topics.length === 0 || !quizAttempts) {
       return { progress: 0, completedTopics: [] };
     }
-
-    // A topic is considered "active" or "relevant" if the user has attempted a quiz for it.
-    const attemptedTopicIds = new Set(quizAttempts.map(attempt => attempt.quizId));
     
-    const relevantTopics = topics.filter(topic => attemptedTopicIds.has(topic.id));
-
-    if (relevantTopics.length === 0) {
-      // If no topics have been attempted, progress is 0.
-      return { progress: 0, completedTopics: [] };
+    if (topics.length === 0) {
+       return { progress: 0, completedTopics: [] };
     }
 
-    // Find all topics where the user has at least one passing quiz attempt
-    const completed = relevantTopics
-      .filter((topic) =>
-        quizAttempts.some(
+    const completed = topics
+      .filter((topic) => {
+        // A topic needs a question count to be considered for completion
+        if (!topic.questionCount || topic.questionCount === 0) {
+            return false;
+        }
+
+        // Find any passing quiz attempt for this topic
+        return quizAttempts.some(
           (attempt) =>
-            attempt.quizId === topic.id && attempt.score >= PASSING_THRESHOLD
-        )
-      )
+            attempt.quizId === topic.id &&
+            attempt.score >= PASSING_THRESHOLD &&
+            // Check if the quiz was significant enough
+            attempt.totalQuestions >= topic.questionCount * SIGNIFICANT_QUIZ_THRESHOLD
+        );
+      })
       .map((topic) => topic.id);
 
-    const progressPercentage = (completed.length / relevantTopics.length) * 100;
+    const progressPercentage = (completed.length / topics.length) * 100;
 
     return { progress: progressPercentage, completedTopics: completed };
   }, [topics, quizAttempts, isLoading]);

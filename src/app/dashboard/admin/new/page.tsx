@@ -136,6 +136,8 @@ export default function NewCoursePage() {
         courseId: courseRef.id,
         adminId: firebaseUser.uid,
         createdAt: serverTimestamp(),
+        questionCount: result.questions.length, // Set initial question count
+        flashcardCount: result.flashcards.length,
       });
 
       // Add Flashcards

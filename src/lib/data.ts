@@ -16,6 +16,7 @@ export type Topic = {
   id:string;
   courseId: string;
   name: string;
+  questionCount?: number;
 };
 
 export type Flashcard = {

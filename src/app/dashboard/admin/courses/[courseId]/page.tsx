@@ -55,7 +55,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Check, CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2, XCircle, File as FileIcon, ChevronDown, Settings, Flag, MessageSquare } from 'lucide-react';
 import { useCollection, useDoc, useMemoFirebase, useAuth, useFirestore, useUser } from '@/firebase';
-import { doc, collection, query, writeBatch, serverTimestamp, deleteDoc, updateDoc, getDoc, setDoc, addDoc } from 'firebase/firestore';
+import { doc, collection, query, writeBatch, serverTimestamp, deleteDoc, updateDoc, getDoc, setDoc, addDoc, runTransaction, increment } from 'firebase/firestore';
 import {
     Select,
     SelectContent,
@@ -271,9 +271,17 @@ function AddContentDialog({ courseId, topics, onContentAdded }: { courseId: stri
             courseId: courseId,
             adminId: firebaseUser.uid,
             createdAt: serverTimestamp(),
+            questionCount: result.questions.length,
+            flashcardCount: result.flashcards.length,
         });
       } else {
-        finalTopicId = selectedTopicId;
+        finalTopicId = selectedTopicId!;
+        topicRef = doc(firestore, `courses/${courseId}/topics`, finalTopicId);
+        // Increment the counters for the existing topic
+        batch.update(topicRef, {
+            questionCount: increment(result.questions.length),
+            flashcardCount: increment(result.flashcards.length)
+        });
       }
       
       if (!finalTopicId) {
@@ -471,6 +479,8 @@ function AddTopicDialog({ courseId, adminId, onTopicAdded }: { courseId: string;
         courseId: courseId,
         adminId: adminId,
         createdAt: serverTimestamp(),
+        questionCount: 0,
+        flashcardCount: 0,
       });
 
       setLoading(false);
@@ -553,6 +563,7 @@ function EditContentDialog({ item, topics, originalTopicId, courseId, type, chil
     const handleSave = async () => {
         setLoading(true);
         const collectionName = type === 'flashcard' ? 'flashcards' : 'questions';
+        const countField = type === 'flashcard' ? 'flashcardCount' : 'questionCount';
 
         try {
              if (!firebaseUser) throw new Error("User not authenticated.");
@@ -561,25 +572,33 @@ function EditContentDialog({ item, topics, originalTopicId, courseId, type, chil
                 const itemRef = doc(firestore, `courses/${courseId}/topics/${originalTopicId}/${collectionName}`, item.id);
                 await updateDoc(itemRef, content);
             } else {
-                // Topic changed, so we need to move the document
-                const batch = writeBatch(firestore);
-                const oldDocRef = doc(firestore, `courses/${courseId}/topics/${originalTopicId}/${collectionName}`, item.id);
-                const newDocRef = doc(firestore, `courses/${courseId}/topics/${selectedTopicId}/${collectionName}`, item.id);
-                
-                const currentDocSnapshot = await getDoc(oldDocRef);
-                const currentData = currentDocSnapshot.data();
+                // Topic changed, so we need to move the document in a transaction
+                await runTransaction(firestore, async (transaction) => {
+                    const oldDocRef = doc(firestore, `courses/${courseId}/topics/${originalTopicId}/${collectionName}`, item.id);
+                    const newDocRef = doc(firestore, `courses/${courseId}/topics/${selectedTopicId}/${collectionName}`, item.id);
+                    
+                    const currentDocSnapshot = await transaction.get(oldDocRef);
+                    if (!currentDocSnapshot.exists()) {
+                        throw "Document does not exist!";
+                    }
+                    const currentData = currentDocSnapshot.data();
 
-                const updatedContent = { 
-                    ...currentData,
-                    ...content, 
-                    topicId: selectedTopicId,
-                    adminId: currentData?.adminId || firebaseUser.uid 
-                };
+                    const updatedContent = { 
+                        ...currentData,
+                        ...content, 
+                        topicId: selectedTopicId,
+                        adminId: currentData?.adminId || firebaseUser.uid 
+                    };
 
-                batch.set(newDocRef, updatedContent);
-                batch.delete(oldDocRef);
+                    transaction.set(newDocRef, updatedContent);
+                    transaction.delete(oldDocRef);
 
-                await batch.commit();
+                    // Decrement counter on old topic and increment on new one
+                    const oldTopicRef = doc(firestore, `courses/${courseId}/topics`, originalTopicId);
+                    const newTopicRef = doc(firestore, `courses/${courseId}/topics`, selectedTopicId);
+                    transaction.update(oldTopicRef, { [countField]: increment(-1) });
+                    transaction.update(newTopicRef, { [countField]: increment(1) });
+                });
             }
 
             toast({
@@ -743,9 +762,14 @@ export default function AdminCourseReviewPage() {
   const handleDelete = async (type: 'flashcard' | 'question', id: string) => {
     if (!topicId) return;
     const collectionPath = type === 'flashcard' ? `courses/${courseId}/topics/${topicId}/flashcards` : `courses/${courseId}/topics/${topicId}/questions`;
+    const countField = type === 'flashcard' ? 'flashcardCount' : 'questionCount';
     const itemRef = doc(firestore, collectionPath, id);
+    const topicRef = doc(firestore, `courses/${courseId}/topics`, topicId);
     try {
-        await deleteDoc(itemRef);
+        await runTransaction(firestore, async (transaction) => {
+            transaction.delete(itemRef);
+            transaction.update(topicRef, { [countField]: increment(-1) });
+        });
         toast({ title: `${type.charAt(0).toUpperCase() + type.slice(1)} Deleted`, description: `The item has been removed.` });
     } catch (error: any) {
         toast({ variant: 'destructive', title: 'Deletion Failed', description: error.message });
@@ -805,26 +829,33 @@ export default function AdminCourseReviewPage() {
     setIsBulkActionLoading(true);
     const selectedIds = type === 'flashcard' ? selectedFlashcards : selectedQuestions;
     const collectionName = type === 'flashcard' ? 'flashcards' : 'questions';
-    const batch = writeBatch(firestore);
+    const countField = type === 'flashcard' ? 'flashcardCount' : 'questionCount';
     
     let newTopicId = bulkActionTopic;
     const existingTopic = topics?.find(t => t.id === bulkActionTopic);
 
     try {
-        // We must read the documents first to move them
-        for (const id of selectedIds) {
-            const oldDocRef = doc(firestore, `courses/${courseId}/topics/${topicId}/${collectionName}`, id);
-            const newDocRef = doc(firestore, `courses/${courseId}/topics/${newTopicId}/${collectionName}`, id);
+        await runTransaction(firestore, async (transaction) => {
+            const oldTopicRef = doc(firestore, `courses/${courseId}/topics`, topicId);
+            const newTopicRef = doc(firestore, `courses/${courseId}/topics`, newTopicId);
 
-            const docSnapshot = await getDoc(oldDocRef);
-            if (docSnapshot.exists()) {
-                const data = docSnapshot.data();
-                batch.set(newDocRef, { ...data, topicId: newTopicId });
-                batch.delete(oldDocRef);
+            // We must read the documents first to move them
+            for (const id of selectedIds) {
+                const oldDocRef = doc(firestore, `courses/${courseId}/topics/${topicId}/${collectionName}`, id);
+                const newDocRef = doc(firestore, `courses/${courseId}/topics/${newTopicId}/${collectionName}`, id);
+
+                const docSnapshot = await transaction.get(oldDocRef);
+                if (docSnapshot.exists()) {
+                    const data = docSnapshot.data();
+                    transaction.set(newDocRef, { ...data, topicId: newTopicId });
+                    transaction.delete(oldDocRef);
+                }
             }
-        }
-        
-        await batch.commit();
+            
+            // Update topic counts
+            transaction.update(oldTopicRef, { [countField]: increment(-selectedIds.length) });
+            transaction.update(newTopicRef, { [countField]: increment(selectedIds.length) });
+        });
 
         toast({
             title: 'Bulk Topic Change Successful',
@@ -882,11 +913,12 @@ export default function AdminCourseReviewPage() {
   };
   
   const handleDeleteTopic = async () => {
-    if (!topicId || (flashcards && flashcards.length > 0) || (questions && questions.length > 0)) {
+    const currentTopic = topics?.find(t => t.id === topicId);
+    if (!topicId || !currentTopic || (currentTopic.flashcardCount && currentTopic.flashcardCount > 0) || (currentTopic.questionCount && currentTopic.questionCount > 0)) {
         toast({
             variant: 'destructive',
             title: 'Deletion Failed',
-            description: 'Cannot delete a topic that still contains content.',
+            description: 'Cannot delete a topic that still contains content. Please move or delete the content first.',
         });
         return;
     }
@@ -963,9 +995,9 @@ export default function AdminCourseReviewPage() {
                         variant="destructive" 
                         disabled={
                             isContentLoading || 
-                            !topicId || 
-                            (flashcards && flashcards.length > 0) || 
-                            (questions && questions.length > 0)
+                            !topicId ||
+                            (topics?.find(t => t.id === topicId)?.flashcardCount || 0) > 0 ||
+                            (topics?.find(t => t.id === topicId)?.questionCount || 0) > 0
                         }>
                         <Trash2 className="mr-2 h-4 w-4" />
                         Delete Topic
