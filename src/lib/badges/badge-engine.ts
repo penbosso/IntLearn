@@ -1,13 +1,10 @@
 
+
 import {
-  Firestore,
   Transaction,
   doc,
   collection,
   serverTimestamp,
-  getDocs,
-  query,
-  where,
 } from 'firebase/firestore';
 import { getBadgeDefinitions, Badge } from './badge-definitions';
 
@@ -15,41 +12,30 @@ type BadgeContext = {
   userId: string;
   topicId: string;
   score: number;
+  existingBadgeIds: string[]; // Pass pre-fetched badge IDs
 };
 
 /**
  * Checks for and awards new badges to a user within a Firestore transaction.
+ * This function now expects existing badge data to be passed in to avoid reads within the transaction.
  * @param transaction The Firestore transaction to use for database operations.
- * @param firestore The Firestore instance.
- * @param context The context of the event that could trigger a badge.
- * @returns A promise that resolves with an array of newly awarded badges.
+ * @param context The context of the event that could trigger a badge, including existing badges.
+ * @returns An array of newly awarded badges (definitions).
  */
-export async function awardBadges(
+export function awardBadges(
   transaction: Transaction,
-  firestore: Firestore,
   context: BadgeContext
-): Promise<Badge[]> {
-  const { userId, score } = context;
+): Badge[] {
+  const { userId, score, existingBadgeIds } = context;
   const newBadges: Badge[] = [];
 
   // Get all possible badge definitions
   const allBadges = getBadgeDefinitions();
 
-  // Get all badges the user has already earned
-  const userBadgesRef = collection(
-    firestore,
-    `users/${userId}/userBadges`
-  );
-  // We need to perform this read *before* the transaction to know what to write.
-  // This is a limitation of transactions; you can't query inside them easily.
-  // For high-concurrency needs, this might need rethinking, but for this use case, it's okay.
-  const userBadgesSnapshot = await getDocs(query(userBadgesRef));
-  const earnedBadgeIds = userBadgesSnapshot.docs.map(doc => doc.data().badgeId);
-
   // Check each badge definition
   for (const badge of allBadges) {
-    // 1. Check if user already has this badge
-    if (earnedBadgeIds.includes(badge.id)) {
+    // 1. Check if user already has this badge (using pre-fetched data)
+    if (existingBadgeIds.includes(badge.id)) {
       continue; // Skip to next badge
     }
 
@@ -66,11 +52,13 @@ export async function awardBadges(
 
     // 3. If criteria are met, award the badge within the transaction
     if (criteriaMet) {
+      const userBadgesRef = collection(doc(firestore, 'users', userId), 'userBadges');
       const newUserBadgeRef = doc(userBadgesRef);
+      
       transaction.set(newUserBadgeRef, {
         userId,
         badgeId: badge.id,
-        earnedDate: serverTimestamp(), // Use server timestamp for consistency
+        earnedDate: serverTimestamp(),
       });
       newBadges.push(badge);
     }
@@ -78,3 +66,8 @@ export async function awardBadges(
 
   return newBadges;
 }
+
+// We need to get the firestore instance from somewhere.
+// A global/singleton approach is easiest for this engine.
+import { initializeFirebase } from '@/firebase';
+const { firestore } = initializeFirebase();

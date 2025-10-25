@@ -12,13 +12,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { Check, X, Repeat, Trophy, SkipForward, Loader2, Flag } from 'lucide-react';
 import { useFirestore, useUser } from '@/firebase';
-import { collection, runTransaction, doc, Timestamp } from 'firebase/firestore';
+import { collection, runTransaction, doc, Timestamp, getDocs, query } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { useParams, useSearchParams } from 'next/navigation';
 import { differenceInCalendarDays } from 'date-fns';
 import { awardBadges } from '@/lib/badges/badge-engine';
 import { evaluateAnswer } from '@/ai/flows/evaluate-answer-flow';
 import { FlagContentDialog } from '@/components/flag-content-dialog';
+import type { Badge, UserBadge } from '@/lib/data';
 
 type AnswerState = 'unanswered' | 'correct' | 'incorrect';
 
@@ -53,9 +54,13 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
 
     try {
         const percentage = Math.round((finalScore / questions.length) * 100);
-        const xpGained = Math.round(finalScore * 10); // e.g., 10 XP per correct answer, fractional scores are rounded
+        const xpGained = Math.round(finalScore * 10);
 
-        // Use a transaction to ensure atomicity
+        // Perform the read for existing badges *before* the transaction starts.
+        const userBadgesRef = collection(firestore, `users/${user.uid}/userBadges`);
+        const existingBadgesSnapshot = await getDocs(query(userBadgesRef));
+        const existingBadgeIds = existingBadgesSnapshot.docs.map(doc => doc.data().badgeId);
+
         await runTransaction(firestore, async (transaction) => {
             const userRef = doc(firestore, 'users', user.uid);
             const userDoc = await transaction.get(userRef);
@@ -68,8 +73,8 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
             const quizAttemptRef = doc(collection(firestore, `users/${user.uid}/quizAttempts`));
             const attemptData = {
                 userId: user.uid,
-                courseId: courseId, // Save courseId
-                quizId: topicId, // Using topicId as quizId for now
+                courseId: courseId,
+                quizId: topicId,
                 topicName: topicName,
                 score: percentage,
                 attemptedDate: Timestamp.now(),
@@ -91,13 +96,12 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
                 const daysDifference = differenceInCalendarDays(today, lastDate);
 
                 if (daysDifference === 1) {
-                    newStreak = currentStreak + 1; // It's consecutive
+                    newStreak = currentStreak + 1;
                 } else if (daysDifference > 1) {
-                    newStreak = 1; // Streak is broken, reset to 1
+                    newStreak = 1;
                 }
-                // if daysDifference is 0, do nothing to the streak
             } else {
-                newStreak = 1; // First activity ever
+                newStreak = 1;
             }
 
             transaction.update(userRef, { 
@@ -106,14 +110,14 @@ export default function QuizComponent({ questions: initialQuestions, topicName }
                 lastActivityDate: today,
             });
 
-            // 3. Award Badges (pass transaction to engine)
-            const newBadges = await awardBadges(transaction, firestore, {
+            // 3. Award Badges (pass transaction and pre-fetched data)
+            const newBadges = awardBadges(transaction, {
               userId: user.uid,
               topicId,
               score: percentage,
+              existingBadgeIds: existingBadgeIds,
             });
 
-            // Show toasts for new badges after a delay
             setTimeout(() => {
               newBadges.forEach((badge, index) => {
                 setTimeout(() => {
