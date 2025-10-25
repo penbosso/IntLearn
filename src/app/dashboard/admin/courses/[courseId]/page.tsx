@@ -55,7 +55,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Check, CheckCircle, Edit, Trash2, PlusCircle, UploadCloud, Loader2, XCircle, File as FileIcon, ChevronDown, Settings, Flag, MessageSquare } from 'lucide-react';
 import { useCollection, useDoc, useMemoFirebase, useAuth, useFirestore, useUser } from '@/firebase';
-import { doc, collection, query, writeBatch, serverTimestamp, deleteDoc, updateDoc, getDoc, setDoc, addDoc, runTransaction, increment } from 'firebase/firestore';
+import { doc, collection, query, writeBatch, serverTimestamp, deleteDoc, updateDoc, getDoc, setDoc, addDoc, runTransaction, increment, DocumentData, DocumentReference } from 'firebase/firestore';
 import {
     Select,
     SelectContent,
@@ -825,53 +825,53 @@ export default function AdminCourseReviewPage() {
 
   const handleConfirmBulkTopicChange = async (type: 'flashcard' | 'question') => {
     if (!bulkActionTopic || !topicId) return;
-
+  
     setIsBulkActionLoading(true);
     const selectedIds = type === 'flashcard' ? selectedFlashcards : selectedQuestions;
     const collectionName = type === 'flashcard' ? 'flashcards' : 'questions';
     const countField = type === 'flashcard' ? 'flashcardCount' : 'questionCount';
-    
-    let newTopicId = bulkActionTopic;
+  
     const existingTopic = topics?.find(t => t.id === bulkActionTopic);
-
+  
     try {
-        await runTransaction(firestore, async (transaction) => {
-            const oldTopicRef = doc(firestore, `courses/${courseId}/topics`, topicId);
-            const newTopicRef = doc(firestore, `courses/${courseId}/topics`, newTopicId);
-
-            // We must read the documents first to move them
-            for (const id of selectedIds) {
-                const oldDocRef = doc(firestore, `courses/${courseId}/topics/${topicId}/${collectionName}`, id);
-                const newDocRef = doc(firestore, `courses/${courseId}/topics/${newTopicId}/${collectionName}`, id);
-
-                const docSnapshot = await transaction.get(oldDocRef);
-                if (docSnapshot.exists()) {
-                    const data = docSnapshot.data();
-                    transaction.set(newDocRef, { ...data, topicId: newTopicId });
-                    transaction.delete(oldDocRef);
-                }
-            }
-            
-            // Update topic counts
-            transaction.update(oldTopicRef, { [countField]: increment(-selectedIds.length) });
-            transaction.update(newTopicRef, { [countField]: increment(selectedIds.length) });
+      await runTransaction(firestore, async (transaction) => {
+        const oldTopicRef = doc(firestore, `courses/${courseId}/topics`, topicId);
+        const newTopicRef = doc(firestore, `courses/${courseId}/topics`, bulkActionTopic);
+  
+        // Phase 1: Read all documents that need to be moved.
+        const oldDocRefs = selectedIds.map(id => doc(firestore, `courses/${courseId}/topics/${topicId}/${collectionName}`, id));
+        const docSnapshots = await Promise.all(oldDocRefs.map(ref => transaction.get(ref)));
+  
+        // Phase 2: Perform all writes.
+        docSnapshots.forEach((docSnapshot, index) => {
+          if (docSnapshot.exists()) {
+            const data = docSnapshot.data();
+            const newDocRef = doc(firestore, `courses/${courseId}/topics/${bulkActionTopic}/${collectionName}`, docSnapshot.id);
+            transaction.set(newDocRef, { ...data, topicId: bulkActionTopic });
+            transaction.delete(docSnapshot.ref);
+          }
         });
-
-        toast({
-            title: 'Bulk Topic Change Successful',
-            description: `${selectedIds.length} items moved to topic "${existingTopic?.name}".`,
-        });
-        
-        handleContentRefresh();
-        if (type === 'flashcard') setSelectedFlashcards([]);
-        else setSelectedQuestions([]);
-        setIsBulkTopicDialogOpen(false);
-
+  
+        // Update topic counts.
+        transaction.update(oldTopicRef, { [countField]: increment(-selectedIds.length) });
+        transaction.update(newTopicRef, { [countField]: increment(selectedIds.length) });
+      });
+  
+      toast({
+        title: 'Bulk Topic Change Successful',
+        description: `${selectedIds.length} items moved to topic "${existingTopic?.name}".`,
+      });
+  
+      handleContentRefresh();
+      if (type === 'flashcard') setSelectedFlashcards([]);
+      else setSelectedQuestions([]);
+      setIsBulkTopicDialogOpen(false);
+  
     } catch (error: any) {
-        console.error('Bulk topic change failed', error);
-        toast({ variant: 'destructive', title: 'Bulk Topic Change Failed', description: error.message });
+      console.error('Bulk topic change failed', error);
+      toast({ variant: 'destructive', title: 'Bulk Topic Change Failed', description: error.message });
     } finally {
-        setIsBulkActionLoading(false);
+      setIsBulkActionLoading(false);
     }
   };
 
@@ -1323,3 +1323,5 @@ export default function AdminCourseReviewPage() {
     </div>
   );
 }
+
+    
