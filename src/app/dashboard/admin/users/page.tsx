@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -147,5 +146,3 @@ export default function AdminUsersPage() {
     </div>
   );
 }
-
-    

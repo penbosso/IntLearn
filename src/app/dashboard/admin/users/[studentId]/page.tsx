@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useParams, notFound } from 'next/navigation';
@@ -290,5 +289,3 @@ export default function StudentDetailPage() {
     </div>
   );
 }
-
-    
