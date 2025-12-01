@@ -14,6 +14,7 @@ import {
   BrainCircuit,
   PlusCircle,
   Users,
+  Banknote,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -46,18 +47,19 @@ type NavItem = {
   href: string;
   label: string;
   icon: React.ElementType;
-  roles: ('student' | 'admin' | 'creator')[];
+  roles: ('student' | 'admin' | 'creator' | 'accountant')[];
   exact?: boolean;
 };
 
 const navItems: NavItem[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['student', 'admin', 'creator'], exact: true },
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['student', 'admin', 'creator', 'accountant'], exact: true },
   { href: '/dashboard', label: 'Courses', icon: BookOpen, roles: ['student'] },
   { href: '/dashboard/performance', label: 'Performance', icon: BarChart3, roles: ['student'] },
   { href: '/dashboard/leaderboard', label: 'Leaderboard', icon: Trophy, roles: ['student'] },
   { href: '/dashboard/admin', label: 'Admin', icon: Shield, roles: ['admin', 'creator'] },
   { href: '/dashboard/admin/users', label: 'Users', icon: Users, roles: ['admin'] },
   { href: '/dashboard/admin/new', label: 'Create Course', icon: PlusCircle, roles: ['admin', 'creator'] },
+  { href: '/dashboard/accounting', label: 'Accounting', icon: Banknote, roles: ['admin', 'accountant'] },
 ];
 
 export default function DashboardLayout({
@@ -187,3 +189,5 @@ function UserNav({ user, onLogout }: { user: User | null, onLogout: () => void }
     </DropdownMenu>
   );
 }
+
+    

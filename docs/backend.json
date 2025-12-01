@@ -22,7 +22,7 @@
         "role": {
           "type": "string",
           "description": "Role of the user.",
-          "enum": ["admin", "student", "creator"]
+          "enum": ["admin", "student", "creator", "accountant"]
         },
         "xp": {
           "type": "number",
@@ -431,6 +431,83 @@
         "badgeId",
         "earnedDate"
       ]
+    },
+    "Account": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Account",
+      "type": "object",
+      "description": "Represents a financial account.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the account."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the account (e.g., 'Main Bank Account')."
+        },
+        "balance": {
+          "type": "number",
+          "description": "The current balance of the account."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the account was created."
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "The ID of the user who created the account."
+        }
+      },
+      "required": ["id", "name", "balance", "createdAt", "createdBy"]
+    },
+    "Transaction": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Transaction",
+      "type": "object",
+      "description": "Represents a single financial transaction.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the transaction."
+        },
+        "accountId": {
+          "type": "string",
+          "description": "Reference to the Account this transaction belongs to."
+        },
+        "type": {
+          "type": "string",
+          "description": "Type of transaction.",
+          "enum": ["income", "expense"]
+        },
+        "amount": {
+          "type": "number",
+          "description": "The amount of the transaction."
+        },
+        "note": {
+          "type": "string",
+          "description": "A note or description for the transaction."
+        },
+        "runningBalance": {
+          "type": "number",
+          "description": "The balance of the account after this transaction."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the transaction was recorded."
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "The ID of the user who recorded the transaction."
+        },
+        "createdByName": {
+          "type": "string",
+          "description": "The name of the user who recorded the transaction."
+        }
+      },
+      "required": ["id", "accountId", "type", "amount", "note", "runningBalance", "createdAt", "createdBy", "createdByName"]
     }
   },
   "auth": {
@@ -681,10 +758,45 @@
             }
           ]
         }
+      },
+      {
+        "path": "/accounts/{accountId}",
+        "definition": {
+          "entityName": "Account",
+          "schema": {
+            "$ref": "#/backend/entities/Account"
+          },
+          "description": "Stores financial account information.",
+          "params": [
+            {
+              "name": "accountId",
+              "description": "The unique identifier for the financial account."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/accounts/{accountId}/transactions/{transactionId}",
+        "definition": {
+          "entityName": "Transaction",
+          "schema": {
+            "$ref": "#/backend/entities/Transaction"
+          },
+          "description": "Stores all transactions for a specific account.",
+          "params": [
+            {
+              "name": "accountId",
+              "description": "The unique identifier for the financial account."
+            },
+            {
+              "name": "transactionId",
+              "description": "The unique identifier for the transaction."
+            }
+          ]
+        }
       }
     ],
     "reasoning": "The Firestore structure is designed to support the IntLearn application's core features, focusing on AI-driven content generation, personalized learning, and performance tracking. The structure prioritizes authorization independence by denormalizing authorization data (specifically, the `adminId` for courses) into subcollections when necessary.\n\n**Authorization Independence and QAPs:**\n\n*   **Courses and Subcollections:** The `courses/{courseId}` collection stores course information. The `adminId` field indicates the administrator who created the course. Subcollections like `topics`, `flashcards`, `questions`, and `quizzes` are nested under each course. To ensure authorization independence, each document within these subcollections will need to duplicate the `adminId` from the parent course. This allows rules to validate that the admin modifying content in these subcollections is indeed the owner, without needing a `get()` call.\n*   **User Data:** User-specific data, like `enrollments`, `quizAttempts`, `performances`, and `userBadges` are stored under `/users/{userId}`. This path-based ownership simplifies security rules, ensuring only the user or an admin can access this data.\n\n**Structural Segregation:**\n\n*   The structure segregates data with different access needs. For example, user profiles are stored in the `/users/{userId}` collection, ensuring that only the user and potentially admins have access to this information. Course content is stored separately, with access controlled based on the `adminId` and user roles.\n\n**Access Modeling:**\n\n*   **Path-Based Ownership:** User-related data (enrollments, quiz attempts, performance, badges) uses the `/users/{userId}` path, clearly establishing ownership. Courses are owned by admins, and this ownership is denormalized into the subcollections.\n\n**Data Clarity and Predictability:**\n\n*   The schema uses explicit naming conventions and avoids dynamic keys. Relationships between entities are clearly defined using foreign keys (e.g., `courseId`, `topicId`).\n\nThis structure is designed to be secure, scalable, and easily debuggable, adhering to the principles of authorization independence, structural segregation, and clear access modeling. The denormalization of `adminId` into course subcollections enables robust and efficient security rules without relying on costly `get()` operations."
   }
 }
-
     

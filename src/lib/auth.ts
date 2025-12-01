@@ -1,4 +1,3 @@
-
 // In a real app, you would have a robust authentication system.
 // For this prototype, we'll use a mock user object.
 import { User as FirebaseUser } from 'firebase/auth';
@@ -9,7 +8,7 @@ export type User = {
   id: string;
   name: string;
   email: string;
-  role: 'student' | 'admin';
+  role: 'student' | 'admin' | 'creator' | 'accountant';
   avatarUrl: string;
   xp: number;
   streak: number;
@@ -59,3 +58,5 @@ export async function getCurrentUser(firebaseUser?: FirebaseUser | null): Promis
     streak: 0,
   };
 }
+
+    

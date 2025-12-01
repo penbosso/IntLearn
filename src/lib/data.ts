@@ -1,4 +1,3 @@
-
 // This file is now primarily for types and mock data for leaderboards.
 // Course and topic data will be fetched directly from Firestore in components.
 
@@ -16,7 +15,6 @@ export type Topic = {
   id:string;
   courseId: string;
   name: string;
-  questionCount?: number;
 };
 
 export type Flashcard = {
@@ -62,8 +60,6 @@ export type QuizAttempt = {
   topicName: string;
   score: number;
   attemptedDate: any; // Firestore Timestamp
-  correctAnswers: number;
-  totalQuestions: number;
 };
 
 
@@ -82,3 +78,25 @@ export type UserBadge = {
     badgeId: string;
     earnedDate: any; // Firestore Timestamp
 }
+
+export type Account = {
+    id: string;
+    name: string;
+    balance: number;
+    createdAt: any; // Firestore Timestamp
+    createdBy: string;
+}
+
+export type Transaction = {
+    id: string;
+    accountId: string;
+    type: 'income' | 'expense';
+    amount: number;
+    note: string;
+    runningBalance: number;
+    createdAt: any; // Firestore Timestamp
+    createdBy: string;
+    createdByName: string;
+}
+
+    

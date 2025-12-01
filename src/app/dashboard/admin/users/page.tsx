@@ -26,7 +26,7 @@ import { Loader2, Shield } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
-type UserRole = 'student' | 'creator' | 'admin';
+type UserRole = 'student' | 'creator' | 'admin' | 'accountant';
 
 export default function AdminUsersPage() {
   const firestore = useFirestore();
@@ -53,7 +53,9 @@ export default function AdminUsersPage() {
       case 'admin':
         return 'bg-primary/20 text-primary-foreground';
       case 'creator':
-        return 'bg-accent/20 text-accent-foreground';
+        return 'bg-purple-500/20 text-purple-200';
+      case 'accountant':
+          return 'bg-green-500/20 text-green-200';
       default:
         return 'bg-secondary text-secondary-foreground';
     }
@@ -76,6 +78,7 @@ export default function AdminUsersPage() {
               <TabsTrigger value="student">Students</TabsTrigger>
               <TabsTrigger value="creator">Creators</TabsTrigger>
               <TabsTrigger value="admin">Admins</TabsTrigger>
+              <TabsTrigger value="accountant">Accountants</TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -144,3 +147,5 @@ export default function AdminUsersPage() {
     </div>
   );
 }
+
+    
