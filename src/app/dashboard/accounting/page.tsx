@@ -53,11 +53,13 @@ import {
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import type { Account, Transaction } from '@/lib/data';
+import { getCurrentUser } from '@/lib/auth';
+
 
 function NewTransactionDialog({ accountId, onTransactionAdded }: { accountId: string; onTransactionAdded: () => void }) {
   const { toast } = useToast();
   const firestore = useFirestore();
-  const { user } = useUser();
+  const { user: firebaseUser } = useUser();
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -76,13 +78,14 @@ function NewTransactionDialog({ accountId, onTransactionAdded }: { accountId: st
       });
       return;
     }
-    if (!user) {
+    if (!firebaseUser) {
         toast({ variant: 'destructive', title: 'Not Authenticated' });
         return;
     }
 
     setLoading(true);
     try {
+        const appUser = await getCurrentUser(firebaseUser);
         const accountRef = doc(firestore, 'accounts', accountId);
         const transactionsRef = collection(firestore, `accounts/${accountId}/transactions`);
         
@@ -104,8 +107,8 @@ function NewTransactionDialog({ accountId, onTransactionAdded }: { accountId: st
                 note: note,
                 runningBalance: newBalance,
                 createdAt: serverTimestamp(),
-                createdBy: user.uid,
-                createdByName: user.displayName || 'N/A',
+                createdBy: appUser.id,
+                createdByName: appUser.name || 'N/A',
             });
 
             // 2. Update account balance
@@ -432,5 +435,3 @@ export default function AccountingPage() {
     </div>
   );
 }
-
-    
