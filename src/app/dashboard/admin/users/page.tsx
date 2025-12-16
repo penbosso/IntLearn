@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -44,7 +45,7 @@ export default function AdminUsersPage() {
     const filtered = users.filter(user => {
         if (filterRole === 'all') return true;
         // Handle both `roles` (array) and `role` (string) for backward compatibility
-        const userRoles = user.roles || (user.role ? [user.role] : []);
+        const userRoles = Array.isArray(user.roles) ? user.roles : (user.role ? [user.role] : []);
         return userRoles.includes(filterRole);
     });
 
@@ -103,43 +104,46 @@ export default function AdminUsersPage() {
                   </TableCell>
                 </TableRow>
               )}
-              {!isLoading && filteredAndSortedUsers.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar>
-                        <AvatarImage src={user.avatarUrl} />
-                        <AvatarFallback>
-                          {user.name?.charAt(0) || 'U'}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="font-medium">{user.name}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {user.email}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                        {user.roles && user.roles.map(role => (
-                             <span key={role} className={`px-2 py-1 text-xs font-semibold rounded-full capitalize border ${getRoleBadgeStyle(role)}`}>
-                                {role}
-                            </span>
-                        ))}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right font-bold">
-                    {user.xp?.toLocaleString() || 0}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button asChild variant="outline" size="sm">
-                      <Link href={`/dashboard/admin/users/${user.id}`}>
-                        View Details
-                      </Link>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {!isLoading && filteredAndSortedUsers.map((user) => {
+                const userRoles = Array.isArray(user.roles) ? user.roles : (user.role ? [user.role] : []);
+                return (
+                  <TableRow key={user.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Avatar>
+                          <AvatarImage src={user.avatarUrl} />
+                          <AvatarFallback>
+                            {user.name?.charAt(0) || 'U'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="font-medium">{user.name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {user.email}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                          {userRoles.map(role => (
+                              <span key={role} className={`px-2 py-1 text-xs font-semibold rounded-full capitalize border ${getRoleBadgeStyle(role)}`}>
+                                  {role}
+                              </span>
+                          ))}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-bold">
+                      {user.xp?.toLocaleString() || 0}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/dashboard/admin/users/${user.id}`}>
+                          View Details
+                        </Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
               {!isLoading && filteredAndSortedUsers.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center">

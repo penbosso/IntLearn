@@ -10,6 +10,7 @@ export type User = {
   id: string;
   name: string;
   email: string;
+  role?: UserRole; // Keep for backwards compatibility
   roles: UserRole[];
   avatarUrl: string;
   xp: number;
@@ -26,7 +27,10 @@ export async function getCurrentUser(firebaseUser?: FirebaseUser | null): Promis
     if (userDoc.exists()) {
       const userData = userDoc.data();
       // Ensure roles is an array, default to ['student']
-      const roles = Array.isArray(userData.roles) && userData.roles.length > 0 ? userData.roles : (userData.role ? [userData.role] : ['student']);
+      // This handles both old `role: 'string'` and new `roles: ['string']`
+      const roles = Array.isArray(userData.roles) && userData.roles.length > 0 
+        ? userData.roles 
+        : (userData.role ? [userData.role] : ['student']);
       return {
         id: firebaseUser.uid,
         name: userData.displayName || firebaseUser.displayName || 'User',
@@ -62,5 +66,3 @@ export async function getCurrentUser(firebaseUser?: FirebaseUser | null): Promis
     streak: 0,
   };
 }
-
-    
