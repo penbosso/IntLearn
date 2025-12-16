@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useParams, notFound } from 'next/navigation';
@@ -34,7 +35,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { format } from 'date-fns';
 import { useCourseProgress } from '@/hooks/use-course-progress';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { Label } from '@/components/ui/label';
 
@@ -68,8 +69,15 @@ const ALL_ROLES: UserRole[] = ['student', 'creator', 'admin', 'accountant'];
 function RoleManager({ studentId, currentRoles }: { studentId: string; currentRoles: UserRole[] }) {
     const firestore = useFirestore();
     const { toast } = useToast();
-    const [roles, setRoles] = useState(currentRoles);
+    // Ensure roles are initialized to an empty array if currentRoles is undefined.
+    const [roles, setRoles] = useState(currentRoles || []);
     const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        // Update state if the prop changes after initial render
+        setRoles(currentRoles || []);
+    }, [currentRoles]);
+
 
     const handleRoleChange = async (role: UserRole, checked: boolean) => {
         let newRoles: UserRole[];
@@ -120,7 +128,7 @@ function RoleManager({ studentId, currentRoles }: { studentId: string; currentRo
                     <div key={role} className="flex items-center space-x-2">
                       <Checkbox
                         id={`role-${role}`}
-                        checked={roles.includes(role)}
+                        checked={(roles || []).includes(role)}
                         onCheckedChange={(checked) => handleRoleChange(role, !!checked)}
                       />
                       <Label htmlFor={`role-${role}`} className="capitalize">
@@ -237,7 +245,7 @@ export default function StudentDetailPage() {
         </Card>
       </div>
 
-       <RoleManager studentId={studentId} currentRoles={student.roles} />
+       {student?.roles && <RoleManager studentId={studentId} currentRoles={student.roles} />}
 
        <EarnedBadges userId={studentId} />
 
@@ -298,5 +306,3 @@ export default function StudentDetailPage() {
     </div>
   );
 }
-
-    
