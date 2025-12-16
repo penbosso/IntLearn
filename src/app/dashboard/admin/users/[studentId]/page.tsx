@@ -68,7 +68,6 @@ const ALL_ROLES: UserRole[] = ['student', 'creator', 'admin', 'accountant'];
 function RoleManager({ studentId, currentRoles }: { studentId: string; currentRoles: UserRole[] }) {
     const firestore = useFirestore();
     const { toast } = useToast();
-    // Ensure roles are initialized to an empty array if currentRoles is undefined.
     const [roles, setRoles] = useState(currentRoles || []);
     const [isLoading, setIsLoading] = useState(false);
 
@@ -244,7 +243,7 @@ export default function StudentDetailPage() {
         </Card>
       </div>
 
-       {student && student.roles && <RoleManager studentId={studentId} currentRoles={student.roles} />}
+       {student && <RoleManager studentId={studentId} currentRoles={student.roles} />}
 
        <EarnedBadges userId={studentId} />
 
