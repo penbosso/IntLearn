@@ -20,12 +20,11 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
 import { collection, query, where, Query } from 'firebase/firestore';
-import type { User } from '@/lib/auth';
+import type { User, UserRole } from '@/lib/auth';
 import { Loader2, Shield } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
-type UserRole = 'student' | 'creator' | 'admin' | 'accountant';
 
 export default function AdminUsersPage() {
   const firestore = useFirestore();
@@ -37,7 +36,7 @@ export default function AdminUsersPage() {
     if (filterRole === 'all') {
       return query(baseQuery);
     }
-    return query(baseQuery, where('role', '==', filterRole));
+    return query(baseQuery, where('roles', 'array-contains', filterRole));
   }, [firestore, filterRole]);
 
   const { data: users, isLoading } = useCollection<User>(usersQuery as Query<User> | null);
@@ -86,7 +85,7 @@ export default function AdminUsersPage() {
               <TableRow>
                 <TableHead>User</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
+                <TableHead>Roles</TableHead>
                 <TableHead className="text-right">Total XP</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -116,9 +115,13 @@ export default function AdminUsersPage() {
                     {user.email}
                   </TableCell>
                   <TableCell>
-                    <span className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${getRoleBadge(user.role as UserRole)}`}>
-                        {user.role}
-                    </span>
+                    <div className="flex flex-wrap gap-1">
+                        {user.roles.map(role => (
+                             <span key={role} className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${getRoleBadge(role)}`}>
+                                {role}
+                            </span>
+                        ))}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right font-bold">
                     {user.xp?.toLocaleString() || 0}
@@ -146,3 +149,5 @@ export default function AdminUsersPage() {
     </div>
   );
 }
+
+    

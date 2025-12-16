@@ -4,11 +4,13 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { initializeFirebase } from '@/firebase'; 
 
+export type UserRole = 'student' | 'admin' | 'creator' | 'accountant';
+
 export type User = {
   id: string;
   name: string;
   email: string;
-  role: 'student' | 'admin' | 'creator' | 'accountant';
+  roles: UserRole[];
   avatarUrl: string;
   xp: number;
   streak: number;
@@ -23,12 +25,14 @@ export async function getCurrentUser(firebaseUser?: FirebaseUser | null): Promis
 
     if (userDoc.exists()) {
       const userData = userDoc.data();
+      // Ensure roles is an array, default to ['student']
+      const roles = Array.isArray(userData.roles) && userData.roles.length > 0 ? userData.roles : ['student'];
       return {
         id: firebaseUser.uid,
         name: userData.displayName || firebaseUser.displayName || 'User',
         email: firebaseUser.email || '',
         avatarUrl: firebaseUser.photoURL || `https://i.pravatar.cc/150?u=${firebaseUser.uid}`,
-        role: userData.role || 'student',
+        roles: roles,
         xp: userData.xp || 0,
         streak: userData.streak || 0,
         lastActivityDate: userData.lastActivityDate,
@@ -40,7 +44,7 @@ export async function getCurrentUser(firebaseUser?: FirebaseUser | null): Promis
         name: firebaseUser.displayName || 'User',
         email: firebaseUser.email || '',
         avatarUrl: `https://i.pravatar.cc/150?u=${firebaseUser.uid}`,
-        role: 'student',
+        roles: ['student'],
         xp: 0,
         streak: 0,
       };
@@ -52,7 +56,7 @@ export async function getCurrentUser(firebaseUser?: FirebaseUser | null): Promis
     id: 'mock-user',
     name: 'User',
     email: 'user@example.com',
-    role: 'student',
+    roles: ['student'],
     avatarUrl: '',
     xp: 0,
     streak: 0,

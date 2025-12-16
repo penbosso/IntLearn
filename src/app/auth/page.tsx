@@ -91,7 +91,7 @@ export default function AuthPage() {
              await setDoc(userRef, {
                 displayName: signupName,
                 email: user.email,
-                role: 'student', // default role
+                roles: ['student'], // default role
                 xp: 0,
                 streak: 0,
                 lastActivityDate: null,
@@ -136,7 +136,7 @@ export default function AuthPage() {
           await setDoc(userRef, {
             displayName: user.displayName || 'User', // Fallback display name
             email: user.email,
-            role: 'student',
+            roles: ['student'],
             xp: 0,
             streak: 0,
             lastActivityDate: null,
@@ -168,7 +168,7 @@ export default function AuthPage() {
           await setDoc(userRef, {
             displayName: user.displayName,
             email: user.email,
-            role: 'student',
+            roles: ['student'],
             xp: 0,
             streak: 0,
             lastActivityDate: null,

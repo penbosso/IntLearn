@@ -39,7 +39,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import Logo from '@/components/logo';
-import { type User, getCurrentUser } from '@/lib/auth';
+import { type User, getCurrentUser, UserRole } from '@/lib/auth';
 import { useAuth, useUser } from '@/firebase';
 import { signOut } from 'firebase/auth';
 
@@ -47,7 +47,7 @@ type NavItem = {
   href: string;
   label: string;
   icon: React.ElementType;
-  roles: ('student' | 'admin' | 'creator' | 'accountant')[];
+  roles: UserRole[];
   exact?: boolean;
 };
 
@@ -88,7 +88,7 @@ export default function DashboardLayout({
     router.push('/auth');
   };
 
-  const filteredNavItems = navItems.filter(item => user && item.roles.includes(user.role));
+  const filteredNavItems = navItems.filter(item => user && item.roles.some(role => user.roles.includes(role)));
 
   if (isUserLoading || !user) {
     return (

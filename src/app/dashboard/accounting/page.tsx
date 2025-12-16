@@ -369,7 +369,7 @@ export default function AccountingPage() {
             <div className="flex-1 text-center md:text-right">
                 <p className="text-sm text-muted-foreground">Current Balance</p>
                 <p className="text-4xl font-bold">
-                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(selectedAccount.balance)}
+                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'GHS' }).format(selectedAccount.balance)}
                 </p>
             </div>
           )}
@@ -414,10 +414,10 @@ export default function AccountingPage() {
                     <TableCell>{tx.note}</TableCell>
                     <TableCell>{tx.createdByName}</TableCell>
                     <TableCell className="text-right font-mono">
-                        {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(tx.amount)}
+                        {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'GHS' }).format(tx.amount)}
                     </TableCell>
                     <TableCell className="text-right font-mono">
-                        {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(tx.runningBalance)}
+                        {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'GHS' }).format(tx.runningBalance)}
                     </TableCell>
                   </TableRow>
                 ))

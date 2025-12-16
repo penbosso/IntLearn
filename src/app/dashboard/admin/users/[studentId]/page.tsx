@@ -8,7 +8,7 @@ import {
   useMemoFirebase,
 } from '@/firebase';
 import { doc, collection, query, orderBy, where, updateDoc } from 'firebase/firestore';
-import type { User } from '@/lib/auth';
+import type { User, UserRole } from '@/lib/auth';
 import type { QuizAttempt, Course } from '@/lib/data';
 import {
   Card,
@@ -31,13 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
+import { Checkbox } from '@/components/ui/checkbox';
 import { format } from 'date-fns';
 import { useCourseProgress } from '@/hooks/use-course-progress';
 import { useState } from 'react';
@@ -69,32 +63,44 @@ function EnrolledCourseCard({ course }: { course: Course }) {
     )
 }
 
-function RoleManager({ studentId, currentRole }: { studentId: string; currentRole: 'student' | 'admin' | 'creator' | 'accountant' }) {
+const ALL_ROLES: UserRole[] = ['student', 'creator', 'admin', 'accountant'];
+
+function RoleManager({ studentId, currentRoles }: { studentId: string; currentRoles: UserRole[] }) {
     const firestore = useFirestore();
     const { toast } = useToast();
-    const [role, setRole] = useState(currentRole);
+    const [roles, setRoles] = useState(currentRoles);
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleRoleChange = async (newRole: 'student' | 'creator' | 'admin' | 'accountant') => {
-        if (newRole === currentRole) return;
-        setIsLoading(true);
-        try {
-            const userRef = doc(firestore, 'users', studentId);
-            await updateDoc(userRef, { role: newRole });
-            setRole(newRole);
-            toast({
-                title: "Role Updated",
-                description: `User role has been changed to ${newRole}.`,
-            });
-        } catch (error: any) {
-            toast({
-                variant: 'destructive',
-                title: 'Error Updating Role',
-                description: error.message,
-            });
-        } finally {
-            setIsLoading(false);
+    const handleRoleChange = async (role: UserRole, checked: boolean) => {
+        let newRoles: UserRole[];
+        if (checked) {
+            newRoles = [...roles, role];
+        } else {
+            // Ensure at least one role remains, default to 'student'
+            const filteredRoles = roles.filter(r => r !== role);
+            newRoles = filteredRoles.length > 0 ? filteredRoles : ['student'];
         }
+        setRoles(newRoles);
+    };
+
+    const handleSaveChanges = async () => {
+      setIsLoading(true);
+      try {
+          const userRef = doc(firestore, 'users', studentId);
+          await updateDoc(userRef, { roles: roles });
+          toast({
+              title: "Roles Updated",
+              description: `User roles have been successfully updated.`,
+          });
+      } catch (error: any) {
+          toast({
+              variant: 'destructive',
+              title: 'Error Updating Roles',
+              description: error.message,
+          });
+      } finally {
+          setIsLoading(false);
+      }
     };
 
     return (
@@ -102,28 +108,31 @@ function RoleManager({ studentId, currentRole }: { studentId: string; currentRol
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <Shield className="h-5 w-5 text-primary" />
-                    Manage Role
+                    Manage Roles
                 </CardTitle>
                 <CardDescription>
-                    Assign a role to this user to grant or revoke specific permissions.
+                    Assign roles to this user to grant or revoke specific permissions.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="space-y-2">
-                    <Label htmlFor="role-select">User Role</Label>
-                     <Select value={role} onValueChange={(value) => handleRoleChange(value as 'student' | 'creator' | 'admin' | 'accountant')} disabled={isLoading}>
-                        <SelectTrigger id="role-select">
-                            <SelectValue placeholder="Select a role" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="student">Student</SelectItem>
-                            <SelectItem value="creator">Creator</SelectItem>
-                            <SelectItem value="admin">Admin</SelectItem>
-                            <SelectItem value="accountant">Accountant</SelectItem>
-                        </SelectContent>
-                    </Select>
+                  {ALL_ROLES.map(role => (
+                    <div key={role} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`role-${role}`}
+                        checked={roles.includes(role)}
+                        onCheckedChange={(checked) => handleRoleChange(role, !!checked)}
+                      />
+                      <Label htmlFor={`role-${role}`} className="capitalize">
+                        {role}
+                      </Label>
+                    </div>
+                  ))}
                 </div>
-                 {isLoading && <p className="text-sm text-muted-foreground flex items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin"/> Updating...</p>}
+                 <Button onClick={handleSaveChanges} disabled={isLoading}>
+                    {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                    Save Role Changes
+                 </Button>
             </CardContent>
         </Card>
     );
@@ -228,7 +237,7 @@ export default function StudentDetailPage() {
         </Card>
       </div>
 
-       <RoleManager studentId={studentId} currentRole={student.role as 'student' | 'creator' | 'admin' | 'accountant'} />
+       <RoleManager studentId={studentId} currentRoles={student.roles} />
 
        <EarnedBadges userId={studentId} />
 
@@ -289,3 +298,5 @@ export default function StudentDetailPage() {
     </div>
   );
 }
+
+    
