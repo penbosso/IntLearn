@@ -19,32 +19,37 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useCollection, useFirestore, useMemoFirebase } from '@/firebase';
-import { collection, query, where, Query } from 'firebase/firestore';
+import { collection, query, Query } from 'firebase/firestore';
 import type { User, UserRole } from '@/lib/auth';
-import { Loader2, Shield } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 
 export default function AdminUsersPage() {
   const firestore = useFirestore();
   const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
 
+  // Fetch all users and filter on the client to handle both `role` and `roles` fields
   const usersQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    const baseQuery = collection(firestore, 'users');
-    if (filterRole === 'all') {
-      return query(baseQuery);
-    }
-    return query(baseQuery, where('roles', 'array-contains', filterRole));
-  }, [firestore, filterRole]);
+    return query(collection(firestore, 'users'));
+  }, [firestore]);
 
   const { data: users, isLoading } = useCollection<User>(usersQuery as Query<User> | null);
 
-  const sortedUsers = useMemo(() => {
+  const filteredAndSortedUsers = useMemo(() => {
     if (!users) return [];
-    return [...users].sort((a, b) => (b.xp || 0) - (a.xp || 0));
-  }, [users]);
+    
+    const filtered = users.filter(user => {
+        if (filterRole === 'all') return true;
+        // Handle both `roles` (array) and `role` (string) for backward compatibility
+        const userRoles = user.roles || (user.role ? [user.role] : []);
+        return userRoles.includes(filterRole);
+    });
+
+    return [...filtered].sort((a, b) => (b.xp || 0) - (a.xp || 0));
+  }, [users, filterRole]);
   
   const getRoleBadgeStyle = (role: UserRole) => {
     switch (role) {
@@ -98,7 +103,7 @@ export default function AdminUsersPage() {
                   </TableCell>
                 </TableRow>
               )}
-              {!isLoading && sortedUsers.map((user) => (
+              {!isLoading && filteredAndSortedUsers.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -135,7 +140,7 @@ export default function AdminUsersPage() {
                   </TableCell>
                 </TableRow>
               ))}
-              {!isLoading && sortedUsers.length === 0 && (
+              {!isLoading && filteredAndSortedUsers.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center">
                     No users found for the selected filter.

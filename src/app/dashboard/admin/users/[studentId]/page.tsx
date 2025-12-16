@@ -33,7 +33,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
-import { format } from 'date-fns';
 import { useCourseProgress } from '@/hooks/use-course-progress';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
@@ -79,7 +78,7 @@ function RoleManager({ studentId, currentRoles }: { studentId: string; currentRo
     }, [currentRoles]);
 
 
-    const handleRoleChange = async (role: UserRole, checked: boolean) => {
+    const handleRoleChange = (role: UserRole, checked: boolean) => {
         let newRoles: UserRole[];
         if (checked) {
             newRoles = [...roles, role];
@@ -245,7 +244,7 @@ export default function StudentDetailPage() {
         </Card>
       </div>
 
-       {student?.roles && <RoleManager studentId={studentId} currentRoles={student.roles} />}
+       {student && student.roles && <RoleManager studentId={studentId} currentRoles={student.roles} />}
 
        <EarnedBadges userId={studentId} />
 
