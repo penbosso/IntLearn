@@ -135,19 +135,51 @@ export default function DashboardPage() {
   }, [enrollments]);
 
   const filteredCourses = useMemo(() => {
-    return courses?.filter(course => 
+    if (!courses) return { enrolled: [], other: [] };
+    const searchFiltered = courses.filter(course => 
         course.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         course.description.toLowerCase().includes(searchTerm.toLowerCase())
-    ) || [];
-  }, [courses, searchTerm]);
+    );
+    const enrolled = searchFiltered.filter(c => enrolledCourseIds.includes(c.id));
+    const other = searchFiltered.filter(c => !enrolledCourseIds.includes(c.id));
+    return { enrolled, other };
+  }, [courses, searchTerm, enrolledCourseIds]);
 
 
   if (isUserLoading || !user || areCoursesLoading || areEnrollmentsLoading) {
-    return <div>Loading dashboard...</div>;
+    return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
-
-  const enrolledCourses = filteredCourses.filter(c => enrolledCourseIds.includes(c.id)) || [];
-  const otherCourses = filteredCourses.filter(c => !enrolledCourseIds.includes(c.id)) || [];
+  
+  if (user.roles.includes('admin') || user.roles.includes('creator') || user.roles.includes('accountant')) {
+    const isAdmin = user.roles.includes('admin');
+    const isCreator = user.roles.includes('creator');
+    const isAccountant = user.roles.includes('accountant');
+    
+    return (
+        <div className="flex h-full flex-col items-center justify-center gap-6 text-center">
+            <h1 className="text-4xl font-bold font-headline">Admin & Staff Dashboard</h1>
+            <p className="text-lg text-muted-foreground max-w-lg">
+                Welcome! You have special permissions. Use the sidebar navigation to access your tools.
+            </p>
+            <div className="flex gap-4">
+                {(isAdmin || isCreator) && (
+                  <Button asChild>
+                      <Link href="/dashboard/admin">
+                          Go to Admin Home
+                      </Link>
+                  </Button>
+                )}
+                 {(isAdmin || isAccountant) && (
+                  <Button asChild variant="outline">
+                      <Link href="/dashboard/accounting">
+                          Go to Accounting
+                      </Link>
+                  </Button>
+                )}
+            </div>
+        </div>
+    );
+  }
 
 
   return (
@@ -203,8 +235,8 @@ export default function DashboardPage() {
       <div>
         <h2 className="text-2xl font-bold mb-4 font-headline">My Courses</h2>
         <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-          {enrolledCourses.length > 0 ? (
-            enrolledCourses.map((course) => (
+          {filteredCourses.enrolled.length > 0 ? (
+            filteredCourses.enrolled.map((course) => (
               <CourseCard key={course.id} course={course} />
             ))
            ) : (
@@ -223,8 +255,8 @@ export default function DashboardPage() {
        <div>
         <h2 className="text-2xl font-bold mb-4 font-headline">Discover New Courses</h2>
         <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-          {otherCourses.length > 0 ? (
-            otherCourses.map((course) => (
+          {filteredCourses.other.length > 0 ? (
+            filteredCourses.other.map((course) => (
               <CourseCard key={course.id} course={course} enroll />
             ))
            ) : (
@@ -259,7 +291,7 @@ function CourseCard({ course, enroll = false }: CourseCardProps) {
     const firestore = useFirestore();
     const { toast } = useToast();
     const [isEnrolling, setIsEnrolling] = useState(false);
-    const { progress, isLoading: isProgressLoading } = useCourseProgress(course.id);
+    const { progress, isLoading: isProgressLoading } = useCourseProgress(enroll ? null : course.id);
 
 
     const handleEnroll = async (e: React.MouseEvent) => {

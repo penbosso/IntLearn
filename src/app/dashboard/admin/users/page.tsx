@@ -46,16 +46,16 @@ export default function AdminUsersPage() {
     return [...users].sort((a, b) => (b.xp || 0) - (a.xp || 0));
   }, [users]);
   
-  const getRoleBadge = (role: UserRole) => {
+  const getRoleBadgeStyle = (role: UserRole) => {
     switch (role) {
       case 'admin':
-        return 'bg-primary/20 text-primary-foreground';
+        return 'bg-red-500/20 text-red-200 border-red-500/30';
       case 'creator':
-        return 'bg-purple-500/20 text-purple-200';
+        return 'bg-purple-500/20 text-purple-200 border-purple-500/30';
       case 'accountant':
-          return 'bg-green-500/20 text-green-200';
+        return 'bg-green-500/20 text-green-200 border-green-500/30';
       default:
-        return 'bg-secondary text-secondary-foreground';
+        return 'bg-secondary text-secondary-foreground border-border';
     }
   };
 
@@ -116,8 +116,8 @@ export default function AdminUsersPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
-                        {user.roles.map(role => (
-                             <span key={role} className={`px-2 py-1 text-xs font-semibold rounded-full capitalize ${getRoleBadge(role)}`}>
+                        {user.roles && user.roles.map(role => (
+                             <span key={role} className={`px-2 py-1 text-xs font-semibold rounded-full capitalize border ${getRoleBadgeStyle(role)}`}>
                                 {role}
                             </span>
                         ))}
@@ -149,5 +149,3 @@ export default function AdminUsersPage() {
     </div>
   );
 }
-
-    

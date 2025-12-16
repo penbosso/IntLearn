@@ -26,7 +26,7 @@ export async function getCurrentUser(firebaseUser?: FirebaseUser | null): Promis
     if (userDoc.exists()) {
       const userData = userDoc.data();
       // Ensure roles is an array, default to ['student']
-      const roles = Array.isArray(userData.roles) && userData.roles.length > 0 ? userData.roles : ['student'];
+      const roles = Array.isArray(userData.roles) && userData.roles.length > 0 ? userData.roles : (userData.role ? [userData.role] : ['student']);
       return {
         id: firebaseUser.uid,
         name: userData.displayName || firebaseUser.displayName || 'User',

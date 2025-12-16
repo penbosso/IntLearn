@@ -53,7 +53,7 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['student', 'admin', 'creator', 'accountant'], exact: true },
-  { href: '/dashboard', label: 'Courses', icon: BookOpen, roles: ['student'] },
+  { href: '/dashboard/courses', label: 'Courses', icon: BookOpen, roles: ['student'] },
   { href: '/dashboard/performance', label: 'Performance', icon: BarChart3, roles: ['student'] },
   { href: '/dashboard/leaderboard', label: 'Leaderboard', icon: Trophy, roles: ['student'] },
   { href: '/dashboard/admin', label: 'Admin', icon: Shield, roles: ['admin', 'creator'] },
@@ -88,7 +88,28 @@ export default function DashboardLayout({
     router.push('/auth');
   };
 
-  const filteredNavItems = navItems.filter(item => user && item.roles.some(role => user.roles.includes(role)));
+  const filteredNavItems = navItems.filter(item => {
+    if (!user || !user.roles) return false;
+    return item.roles.some(role => user.roles.includes(role))
+  });
+  
+  const getActiveItem = (pathname: string) => {
+    // Find an exact match first
+    let activeItem = filteredNavItems.find(item => item.href === pathname);
+    if (activeItem) return activeItem;
+
+    // Find a prefix match for nested routes, excluding the base dashboard
+    activeItem = filteredNavItems
+      .filter(item => item.href !== '/dashboard' && pathname.startsWith(item.href))
+      // Sort by href length descending to get the most specific match
+      .sort((a, b) => b.href.length - a.href.length)[0];
+      
+    // Default to dashboard if no other match
+    return activeItem || filteredNavItems.find(item => item.href === '/dashboard');
+  }
+
+  const activeItem = getActiveItem(pathname);
+
 
   if (isUserLoading || !user) {
     return (
@@ -110,7 +131,7 @@ export default function DashboardLayout({
               <SidebarMenuItem key={item.label}>
                 <SidebarMenuButton
                   asChild
-                  isActive={item.exact ? pathname === item.href : pathname.startsWith(item.href) && item.href !== '/dashboard'}
+                  isActive={item.exact ? pathname === item.href : (item.href !== '/dashboard' && pathname.startsWith(item.href))}
                   tooltip={item.label}
                 >
                   <Link href={item.href}>
@@ -139,7 +160,7 @@ export default function DashboardLayout({
         <header className="flex h-16 items-center justify-between gap-4 border-b px-6">
           <div className='flex items-center gap-2'>
             <SidebarTrigger className="md:hidden" />
-            <h1 className="text-lg font-semibold">{navItems.find(item => pathname.startsWith(item.href))?.label || 'Dashboard'}</h1>
+            <h1 className="text-lg font-semibold">{activeItem?.label || 'Dashboard'}</h1>
           </div>
           <UserNav user={user} onLogout={handleLogout} />
         </header>
@@ -189,5 +210,3 @@ function UserNav({ user, onLogout }: { user: User | null, onLogout: () => void }
     </DropdownMenu>
   );
 }
-
-    
