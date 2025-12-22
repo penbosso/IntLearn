@@ -943,7 +943,7 @@ export default function AccountingPage() {
     let total = 0;
 
     accounts.forEach(acc => {
-      // Only include standard, non-nested accounts in the total company liquidity
+      // Only include standard, non-nested accounts in the total liquidity
       if (acc.type === 'standard' && !acc.parentId) {
         total += acc.balance;
       }
@@ -1048,7 +1048,7 @@ export default function AccountingPage() {
         </Card>
         <Card>
              <CardHeader>
-                <CardTitle>Company Liquidity</CardTitle>
+                <CardTitle>Liquidity</CardTitle>
                 <CardDescription>Total balance across all root-level standard accounts.</CardDescription>
             </CardHeader>
             <CardContent>
