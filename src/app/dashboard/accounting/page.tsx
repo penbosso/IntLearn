@@ -363,6 +363,10 @@ function NewReceivableDialog({ onAccountAdded, accounts }: { onAccountAdded: () 
             toast({ variant: 'destructive', title: 'Not Authenticated' });
             return;
         }
+        if (!parentId) {
+            toast({ variant: 'destructive', title: 'Parent Account Required', description: 'Please select a parent account to record the receivable under.' });
+            return;
+        }
 
         setLoading(true);
         try {
@@ -460,13 +464,13 @@ function NewReceivableDialog({ onAccountAdded, accounts }: { onAccountAdded: () 
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                          <div className="space-y-2">
-                            <Label htmlFor="parent-account">Parent Account (Optional)</Label>
+                            <Label htmlFor="parent-account">Parent Account</Label>
                              <Select onValueChange={(value) => setParentId(value)} value={parentId || ''}>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Group under..." />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {accounts.filter(a => a.type === 'standard').map(acc => (
+                                    {accounts.filter(a => a.type === 'standard' && !a.parentId).map(acc => (
                                         <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
                                     ))}
                                 </SelectContent>
@@ -493,7 +497,7 @@ function NewReceivableDialog({ onAccountAdded, accounts }: { onAccountAdded: () 
     );
 }
 
-function SettleReceivableDialog({ receivable, accounts, onSettled }: { receivable: Account, accounts: Account[], onSettled: () => void }) {
+function SettleReceivableDialog({ receivable, onSettled }: { receivable: Account, onSettled: () => void }) {
     const { toast } = useToast();
     const firestore = useFirestore();
     const { user: firebaseUser } = useUser();
@@ -501,13 +505,12 @@ function SettleReceivableDialog({ receivable, accounts, onSettled }: { receivabl
     const [open, setOpen] = useState(false);
     
     const [paymentAmount, setPaymentAmount] = useState('');
-    const [depositAccountId, setDepositAccountId] = useState<string | undefined>();
     const [note, setNote] = useState(`Payment for ${receivable.name}`);
 
     const handleSettle = async () => {
         const parsedAmount = parseFloat(paymentAmount);
-        if (!depositAccountId || isNaN(parsedAmount) || parsedAmount <= 0) {
-            toast({ variant: 'destructive', title: 'Invalid Input', description: 'Please select a deposit account and enter a valid amount.' });
+        if (!receivable.parentId || isNaN(parsedAmount) || parsedAmount <= 0) {
+            toast({ variant: 'destructive', title: 'Invalid Input', description: 'A valid amount is required and the receivable must have a parent account.' });
             return;
         }
         if (!firebaseUser) {
@@ -523,64 +526,41 @@ function SettleReceivableDialog({ receivable, accounts, onSettled }: { receivabl
         try {
             const appUser = await getCurrentUser(firebaseUser);
             const receivableRef = doc(firestore, 'accounts', receivable.id);
-            const depositAccountRef = doc(firestore, 'accounts', depositAccountId);
+            const parentRef = doc(firestore, 'accounts', receivable.parentId);
 
             await runTransaction(firestore, async (transaction) => {
                 const receivableDoc = await transaction.get(receivableRef);
-                const depositDoc = await transaction.get(depositAccountRef);
+                const parentDoc = await transaction.get(parentRef);
                 
-                let parentAccountDoc = null;
-                if (receivableDoc.exists() && receivableDoc.data().parentId) {
-                    const parentRef = doc(firestore, 'accounts', receivableDoc.data().parentId);
-                    parentAccountDoc = await transaction.get(parentRef);
+                if (!receivableDoc.exists() || !parentDoc.exists()) {
+                    throw new Error("Receivable or its parent account does not exist.");
                 }
 
-
-                if (!receivableDoc.exists() || !depositDoc.exists()) {
-                    throw new Error("One or more accounts do not exist.");
-                }
-
-                // 1. Update receivable account balance
+                // 1. Update receivable account balance (decrease)
                 const newReceivableBalance = receivableDoc.data().balance - parsedAmount;
                 transaction.update(receivableRef, { balance: newReceivableBalance });
 
                 // 2. Add 'payment' transaction to receivable account
                 const receivableTransactionRef = doc(collection(firestore, `accounts/${receivable.id}/transactions`));
                 transaction.set(receivableTransactionRef, {
-                    type: 'payment', amount: parsedAmount, note, runningBalance: newReceivableBalance,
+                    type: 'payment', 
+                    amount: parsedAmount, 
+                    note, 
+                    runningBalance: newReceivableBalance,
                     createdAt: serverTimestamp(), createdBy: appUser.id, createdByName: appUser.name
                 });
 
-                // 3. Update deposit account balance
-                const newDepositBalance = depositDoc.data().balance + parsedAmount;
-                transaction.update(depositAccountRef, { balance: newDepositBalance });
-
-                // 4. Add 'income' transaction to deposit account
-                 const depositTransactionRef = doc(collection(firestore, `accounts/${depositAccountId}/transactions`));
-                 transaction.set(depositTransactionRef, {
-                     type: 'income', amount: parsedAmount, note: `From: ${receivable.name} - ${note}`, runningBalance: newDepositBalance,
+                // 3. Update parent account balance (no change, as receivable asset is converted to cash asset within the same parent)
+                // We just log the transaction for clarity
+                const parentBalance = parentDoc.data().balance;
+                const parentTransactionRef = doc(collection(firestore, `accounts/${receivable.parentId!}/transactions`));
+                 transaction.set(parentTransactionRef, {
+                     type: 'income', // Money came into the parent account
+                     amount: parsedAmount, 
+                     note: `Payment from: ${receivable.name}`, 
+                     runningBalance: parentBalance, // The parent's total asset value doesn't change, just its composition
                      createdAt: serverTimestamp(), createdBy: appUser.id, createdByName: appUser.name
                  });
-
-                // 5. Update parent of receivable if it exists
-                if (parentAccountDoc && parentAccountDoc.exists()) {
-                    const currentParentBalance = parentAccountDoc.data()!.balance;
-                    const newParentBalance = currentParentBalance - parsedAmount;
-                    
-                    transaction.update(parentAccountDoc.ref, { balance: newParentBalance });
-
-                    const parentTransactionRef = doc(collection(parentAccountDoc.ref, 'transactions'));
-                    transaction.set(parentTransactionRef, {
-                        accountId: parentAccountDoc.id,
-                        type: 'expense',
-                        amount: parsedAmount,
-                        note: `Payment received from: ${receivable.name}`,
-                        runningBalance: newParentBalance,
-                        createdAt: serverTimestamp(),
-                        createdBy: appUser.id,
-                        createdByName: appUser.name,
-                    });
-                }
             });
 
             if (receivable.balance - parsedAmount === 0) {
@@ -624,17 +604,6 @@ function SettleReceivableDialog({ receivable, accounts, onSettled }: { receivabl
                             <Input type="number" step="0.01" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} />
                              <Button variant="outline" onClick={() => setPaymentAmount(String(receivable.balance))}>Full</Button>
                         </div>
-                    </div>
-                     <div className="space-y-2">
-                        <Label>Deposit to Account</Label>
-                         <Select onValueChange={setDepositAccountId} value={depositAccountId}>
-                            <SelectTrigger><SelectValue placeholder="Select deposit account..." /></SelectTrigger>
-                            <SelectContent>
-                                {accounts.filter(a => a.type === 'standard').map(acc => (
-                                    <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
                     </div>
                      <div className="space-y-2">
                         <Label>Note</Label>
@@ -838,7 +807,7 @@ export default function AccountingPage() {
             {selectedAccount && (
                 <CardFooter className="justify-end border-t pt-4 gap-2">
                     {selectedAccount.type === 'receivable' && selectedAccount.status === 'open' && (
-                        <SettleReceivableDialog receivable={selectedAccount} accounts={accounts || []} onSettled={forceRefresh} />
+                        <SettleReceivableDialog receivable={selectedAccount} onSettled={forceRefresh} />
                     )}
                     {selectedAccount.type === 'standard' && (
                         <NewTransactionDialog accountId={selectedAccountId!} onTransactionAdded={forceRefresh} />
