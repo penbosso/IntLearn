@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo, Fragment } from 'react';
+import { useState, useMemo, Fragment, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -51,7 +51,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, PlusCircle, Banknote, Trash2, FilePlus2, HandCoins, ArrowRightLeft } from 'lucide-react';
+import { Loader2, PlusCircle, Banknote, Trash2, FilePlus2, HandCoins, ArrowRightLeft, Bell, X } from 'lucide-react';
 import { useCollection, useFirestore, useUser, useMemoFirebase } from '@/firebase';
 import {
   collection,
@@ -63,12 +63,38 @@ import {
   serverTimestamp,
   getDocs,
   writeBatch,
-  updateDoc
+  updateDoc,
+  where,
+  arrayUnion,
+  Timestamp,
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import type { Account, Transaction } from '@/lib/data';
+import type { Account, Transaction, Notification } from '@/lib/data';
 import { getCurrentUser } from '@/lib/auth';
+import { cn } from '@/lib/utils';
+import {
+  Toast,
+  ToastClose,
+  ToastDescription,
+  ToastProvider,
+  ToastTitle,
+  ToastViewport,
+} from "@/components/ui/toast"
 
+
+async function createNotification(firestore: any, message: string, creatorName: string) {
+    try {
+        await addDoc(collection(firestore, 'notifications'), {
+            message: message,
+            type: 'accounting',
+            createdBy: creatorName,
+            createdAt: serverTimestamp(),
+            seenBy: [],
+        });
+    } catch (error) {
+        console.error("Failed to create notification:", error);
+    }
+}
 
 function NewTransactionDialog({ accountId, onTransactionAdded }: { accountId: string; onTransactionAdded: () => void }) {
   const { toast } = useToast();
@@ -101,7 +127,6 @@ function NewTransactionDialog({ accountId, onTransactionAdded }: { accountId: st
     try {
         const appUser = await getCurrentUser(firebaseUser);
         const accountRef = doc(firestore, 'accounts', accountId);
-        const transactionsRef = collection(firestore, `accounts/${accountId}/transactions`);
         
         await runTransaction(firestore, async (transaction) => {
             const accountDoc = await transaction.get(accountRef);
@@ -112,7 +137,7 @@ function NewTransactionDialog({ accountId, onTransactionAdded }: { accountId: st
             const currentBalance = accountDoc.data().balance;
             const newBalance = type === 'income' ? currentBalance + parsedAmount : currentBalance - parsedAmount;
             
-            const newTransactionRef = doc(transactionsRef);
+            const newTransactionRef = doc(collection(accountRef, 'transactions'));
             transaction.set(newTransactionRef, {
                 accountId: accountId,
                 type: type,
@@ -125,6 +150,7 @@ function NewTransactionDialog({ accountId, onTransactionAdded }: { accountId: st
             });
 
             transaction.update(accountRef, { balance: newBalance });
+             await createNotification(firestore, `${appUser.name} recorded a new ${type} of ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'GHS' }).format(parsedAmount)} for account "${accountDoc.data().name}".`, appUser.name);
         });
 
       toast({
@@ -265,6 +291,7 @@ function NewAccountDialog({ onAccountAdded, parentId = null }: { onAccountAdded:
             });
         }
       });
+      await createNotification(firestore, `${appUser.name} created a new standard account: "${accountName}".`, appUser.name);
 
 
       toast({
@@ -422,6 +449,7 @@ function NewReceivableDialog({ onAccountAdded, accounts }: { onAccountAdded: () 
                     createdBy: appUser.id,
                     createdByName: appUser.name || 'N/A',
                 });
+                await createNotification(firestore, `${appUser.name} created a new receivable for "${customerName}" of ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'GHS' }).format(parsedAmount)}.`, appUser.name);
             });
 
 
@@ -523,10 +551,8 @@ function SettleReceivableDialog({ receivable, onSettled }: { receivable: Account
 
             await runTransaction(firestore, async (transaction) => {
                 const receivableDoc = await transaction.get(receivableRef);
-                const parentDoc = await transaction.get(parentRef);
-                
-                if (!receivableDoc.exists() || !parentDoc.exists()) {
-                    throw new Error("Receivable or its parent account does not exist.");
+                if (!receivableDoc.exists()) {
+                    throw new Error("Receivable account does not exist.");
                 }
 
                 // 1. Update receivable account balance (decrease)
@@ -542,6 +568,7 @@ function SettleReceivableDialog({ receivable, onSettled }: { receivable: Account
                     runningBalance: newReceivableBalance,
                     createdAt: serverTimestamp(), createdBy: appUser.id, createdByName: appUser.name
                 });
+                await createNotification(firestore, `${appUser.name} settled a payment of ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'GHS' }).format(parsedAmount)} for receivable "${receivable.name}".`, appUser.name);
             });
 
             if (receivable.balance - parsedAmount === 0) {
@@ -668,6 +695,7 @@ function NewTransferDialog({ onTransferAdded, accounts }: { onTransferAdded: () 
                     runningBalance: newToBalance, transferId: transferId,
                     createdAt: serverTimestamp(), createdBy: appUser.id, createdByName: appUser.name
                 });
+                 await createNotification(firestore, `${appUser.name} transferred ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'GHS' }).format(parsedAmount)} from "${fromData.name}" to "${toData.name}".`, appUser.name);
             });
 
             toast({ title: 'Transfer Successful', description: 'The transfer has been recorded.' });
@@ -745,10 +773,12 @@ function DeleteAccountButton({ account, onAccountDeleted }: { account: Account, 
   const [loading, setLoading] = useState(false);
   const firestore = useFirestore();
   const { toast } = useToast();
+   const { user } = useUser();
 
   const handleDelete = async () => {
     setLoading(true);
     try {
+        const appUser = await getCurrentUser(user);
       const transactionsRef = collection(firestore, `accounts/${account.id}/transactions`);
       const transactionsSnapshot = await getDocs(transactionsRef);
       
@@ -762,6 +792,8 @@ function DeleteAccountButton({ account, onAccountDeleted }: { account: Account, 
       batch.delete(accountRef);
       
       await batch.commit();
+
+      await createNotification(firestore, `${appUser.name} deleted the account: "${account.name}".`, appUser.name || 'Admin');
 
       toast({
         title: 'Account Deleted',
@@ -806,6 +838,76 @@ function DeleteAccountButton({ account, onAccountDeleted }: { account: Account, 
       </AlertDialogContent>
     </AlertDialog>
   );
+}
+
+function AccountingNotifications() {
+    const firestore = useFirestore();
+    const { user } = useUser();
+    const { toast: regularToast } = useToast();
+
+    // Query for recent, unseen accounting notifications
+    const notificationsQuery = useMemoFirebase(() => {
+        if (!firestore || !user) return null;
+        const oneHourAgo = Timestamp.fromMillis(Date.now() - 60 * 60 * 1000);
+        return query(
+            collection(firestore, 'notifications'),
+            where('type', '==', 'accounting'),
+            where('createdAt', '>', oneHourAgo),
+            orderBy('createdAt', 'desc'),
+            limit(10)
+        );
+    }, [firestore, user]);
+
+    const { data: notifications } = useCollection<Notification>(notificationsQuery);
+    
+    const [liveToasts, setLiveToasts] = useState<Notification[]>([]);
+
+    useEffect(() => {
+        if (notifications && user) {
+            const unseenNotifications = notifications.filter(
+                n => !n.seenBy.includes(user.uid) && n.createdBy !== user.displayName
+            );
+            
+            if (unseenNotifications.length > 0) {
+                 setLiveToasts(prev => {
+                     const existingIds = new Set(prev.map(t => t.id));
+                     const newToasts = unseenNotifications.filter(n => !existingIds.has(n.id));
+                     return [...newToasts, ...prev];
+                 });
+            }
+        }
+    }, [notifications, user]);
+
+    const handleDismiss = async (notificationId: string) => {
+         if (!user) return;
+        setLiveToasts(prev => prev.filter(n => n.id !== notificationId));
+        const notifRef = doc(firestore, 'notifications', notificationId);
+        try {
+            await updateDoc(notifRef, {
+                seenBy: arrayUnion(user.uid)
+            });
+        } catch (error) {
+            console.error("Failed to mark notification as seen:", error);
+        }
+    }
+
+    return (
+        <ToastProvider>
+            {liveToasts.map(notification => (
+                <Toast key={notification.id} onOpenChange={(open) => !open && handleDismiss(notification.id)}>
+                    <div className="grid gap-1">
+                        <ToastTitle className="flex items-center gap-2">
+                           <Bell className="h-4 w-4" /> Accounting Activity
+                        </ToastTitle>
+                        <ToastDescription>{notification.message}</ToastDescription>
+                         <p className="text-xs text-muted-foreground">By {notification.createdBy} at {notification.createdAt.toDate().toLocaleTimeString()}</p>
+                    </div>
+                     <ToastClose onClick={() => handleDismiss(notification.id)} />
+                </Toast>
+            ))}
+            <ToastViewport />
+        </ToastProvider>
+    )
 }
 
 
@@ -880,6 +982,7 @@ export default function AccountingPage() {
 
   return (
     <div className="space-y-6">
+      <AccountingNotifications />
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold font-headline flex items-center gap-2">
             <Banknote className="h-8 w-8" />
@@ -980,12 +1083,12 @@ export default function AccountingPage() {
                   <TableRow key={tx.id}>
                     <TableCell>{tx.createdAt ? new Date(tx.createdAt.seconds * 1000).toLocaleString() : '...'}</TableCell>
                     <TableCell>
-                      <span className={`font-semibold capitalize ${
+                      <span className={cn('font-semibold capitalize',
                             tx.type === 'income' ? 'text-green-500' :
                             tx.type === 'expense' ? 'text-red-500' :
                             tx.type === 'payment' ? 'text-blue-500' :
                             'text-purple-500' // For transfers
-                        }`}>
+                        )}>
                         {tx.type}
                       </span>
                     </TableCell>
@@ -1013,3 +1116,5 @@ export default function AccountingPage() {
     </div>
   );
 }
+
+    

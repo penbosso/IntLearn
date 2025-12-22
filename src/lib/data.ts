@@ -105,6 +105,13 @@ export type Transaction = {
     createdByName: string;
 }
 
-    
+export type Notification = {
+    id: string;
+    message: string;
+    type: 'accounting' | 'general';
+    createdBy: string;
+    createdAt: any; // Firestore Timestamp
+    seenBy: string[];
+}
 
     
