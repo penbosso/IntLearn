@@ -67,6 +67,7 @@ import {
   where,
   arrayUnion,
   Timestamp,
+  limit,
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import type { Account, Transaction, Notification } from '@/lib/data';
@@ -551,28 +552,34 @@ function SettleReceivableDialog({ receivable, onSettled }: { receivable: Account
 
             await runTransaction(firestore, async (transaction) => {
                 const receivableDoc = await transaction.get(receivableRef);
-                if (!receivableDoc.exists()) {
-                    throw new Error("Receivable account does not exist.");
+                const parentDoc = await transaction.get(parentRef);
+                
+                if (!receivableDoc.exists() || !parentDoc.exists()) {
+                    throw new Error("Receivable or parent account does not exist.");
                 }
 
                 // 1. Update receivable account balance (decrease)
                 const newReceivableBalance = receivableDoc.data().balance - parsedAmount;
                 transaction.update(receivableRef, { balance: newReceivableBalance });
+                
+                // No change to parent balance directly, as we are converting one asset (receivable) to another (cash)
 
-                // 2. Add 'payment' transaction to receivable account
+                // 2. Add 'payment' transaction to receivable account ledger
                 const receivableTransactionRef = doc(collection(firestore, `accounts/${receivable.id}/transactions`));
                 transaction.set(receivableTransactionRef, {
                     type: 'payment', 
                     amount: parsedAmount, 
-                    note, 
+                    note: `Payment recorded. ${note}`, 
                     runningBalance: newReceivableBalance,
                     createdAt: serverTimestamp(), createdBy: appUser.id, createdByName: appUser.name
                 });
+                
                 await createNotification(firestore, `${appUser.name} settled a payment of ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'GHS' }).format(parsedAmount)} for receivable "${receivable.name}".`, appUser.name);
             });
+            
 
             if (receivable.balance - parsedAmount === 0) {
-                 await updateDoc(receivableRef, { status: 'closed' });
+                 await updateDoc(doc(firestore, 'accounts', receivable.id), { status: 'closed' });
                  toast({ title: 'Receivable Closed!', description: `${receivable.name} has been fully paid and closed.` });
             } else {
                  toast({ title: 'Payment Recorded', description: 'The payment has been successfully recorded.' });
@@ -1116,5 +1123,3 @@ export default function AccountingPage() {
     </div>
   );
 }
-
-    
