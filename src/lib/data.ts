@@ -95,13 +95,16 @@ export type Account = {
 export type Transaction = {
     id: string;
     accountId: string;
-    type: 'income' | 'expense' | 'payment';
+    type: 'income' | 'expense' | 'payment' | 'transfer';
     amount: number;
     note: string;
     runningBalance: number;
+    transferId?: string;
     createdAt: any; // Firestore Timestamp
     createdBy: string;
     createdByName: string;
 }
+
+    
 
     

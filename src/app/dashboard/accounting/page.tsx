@@ -51,7 +51,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, PlusCircle, Banknote, Trash2, FilePlus2, HandCoins } from 'lucide-react';
+import { Loader2, PlusCircle, Banknote, Trash2, FilePlus2, HandCoins, ArrowRightLeft } from 'lucide-react';
 import { useCollection, useFirestore, useUser, useMemoFirebase } from '@/firebase';
 import {
   collection,
@@ -250,8 +250,8 @@ function NewAccountDialog({ onAccountAdded, parentId = null }: { onAccountAdded:
             status: 'open',
         });
 
-        // 2. Create the initial transaction if balance > 0
-        if (parsedBalance > 0) {
+        // 2. Create the initial transaction if balance is not 0
+        if (parsedBalance !== 0) {
             const newTransactionRef = doc(collection(newAccountRef, 'transactions'));
             transaction.set(newTransactionRef, {
                 accountId: newAccountRef.id,
@@ -374,15 +374,10 @@ function NewReceivableDialog({ onAccountAdded, accounts }: { onAccountAdded: () 
             const newAccountRef = doc(collection(firestore, 'accounts'));
 
             await runTransaction(firestore, async (transaction) => {
-                let parentAccountRef = null;
-                let parentAccountDoc = null;
-
-                if (parentId) {
-                    parentAccountRef = doc(firestore, 'accounts', parentId);
-                    parentAccountDoc = await transaction.get(parentAccountRef);
-                    if (!parentAccountDoc.exists()) {
-                        throw new Error("Parent account not found.");
-                    }
+                const parentAccountRef = doc(firestore, 'accounts', parentId);
+                const parentAccountDoc = await transaction.get(parentAccountRef);
+                if (!parentAccountDoc.exists()) {
+                    throw new Error("Parent account not found.");
                 }
                 
                 // 1. Create the receivable account
@@ -410,25 +405,23 @@ function NewReceivableDialog({ onAccountAdded, accounts }: { onAccountAdded: () 
                     createdByName: appUser.name || 'N/A',
                 });
 
-                // 3. Update parent account balance and add transaction if parent exists
-                if (parentAccountRef && parentAccountDoc) {
-                    const currentParentBalance = parentAccountDoc.data()!.balance;
-                    const newParentBalance = currentParentBalance + parsedAmount;
-                    
-                    transaction.update(parentAccountRef, { balance: newParentBalance });
+                // 3. Update parent account balance and add transaction
+                const currentParentBalance = parentAccountDoc.data()!.balance;
+                const newParentBalance = currentParentBalance + parsedAmount;
+                
+                transaction.update(parentAccountRef, { balance: newParentBalance });
 
-                    const parentTransactionRef = doc(collection(parentAccountRef, 'transactions'));
-                    transaction.set(parentTransactionRef, {
-                        accountId: parentId,
-                        type: 'income',
-                        amount: parsedAmount,
-                        note: `New receivable created: ${customerName}`,
-                        runningBalance: newParentBalance,
-                        createdAt: serverTimestamp(),
-                        createdBy: appUser.id,
-                        createdByName: appUser.name || 'N/A',
-                    });
-                }
+                const parentTransactionRef = doc(collection(parentAccountRef, 'transactions'));
+                transaction.set(parentTransactionRef, {
+                    accountId: parentId,
+                    type: 'income',
+                    amount: parsedAmount,
+                    note: `New receivable created: ${customerName}`,
+                    runningBalance: newParentBalance,
+                    createdAt: serverTimestamp(),
+                    createdBy: appUser.id,
+                    createdByName: appUser.name || 'N/A',
+                });
             });
 
 
@@ -550,15 +543,15 @@ function SettleReceivableDialog({ receivable, onSettled }: { receivable: Account
                     createdAt: serverTimestamp(), createdBy: appUser.id, createdByName: appUser.name
                 });
 
-                // 3. Update parent account balance (no change, as receivable asset is converted to cash asset within the same parent)
-                // We just log the transaction for clarity
+                // 3. Log the transaction for clarity in the parent. The parent's total balance does not change.
+                // The composition of assets changes (receivable -> cash), but total value is the same.
                 const parentBalance = parentDoc.data().balance;
                 const parentTransactionRef = doc(collection(firestore, `accounts/${receivable.parentId!}/transactions`));
                  transaction.set(parentTransactionRef, {
-                     type: 'income', // Money came into the parent account
+                     type: 'income',
                      amount: parsedAmount, 
                      note: `Payment from: ${receivable.name}`, 
-                     runningBalance: parentBalance, // The parent's total asset value doesn't change, just its composition
+                     runningBalance: parentBalance,
                      createdAt: serverTimestamp(), createdBy: appUser.id, createdByName: appUser.name
                  });
             });
@@ -617,6 +610,144 @@ function SettleReceivableDialog({ receivable, onSettled }: { receivable: Account
                         Record Payment
                     </Button>
                 </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function NewTransferDialog({ onTransferAdded, accounts }: { onTransferAdded: () => void, accounts: Account[] }) {
+    const { toast } = useToast();
+    const firestore = useFirestore();
+    const { user: firebaseUser } = useUser();
+    const [loading, setLoading] = useState(false);
+    const [open, setOpen] = useState(false);
+    const [fromAccountId, setFromAccountId] = useState<string | null>(null);
+    const [toAccountId, setToAccountId] = useState<string | null>(null);
+    const [amount, setAmount] = useState('');
+    const [note, setNote] = useState('');
+
+    const standardAccounts = useMemo(() => accounts.filter(a => a.type === 'standard'), [accounts]);
+
+    const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        const parsedAmount = parseFloat(amount);
+
+        if (!fromAccountId || !toAccountId || fromAccountId === toAccountId || isNaN(parsedAmount) || parsedAmount <= 0) {
+            toast({ variant: 'destructive', title: 'Invalid Input', description: 'Please select two different accounts and a valid amount.' });
+            return;
+        }
+        if (!firebaseUser) {
+            toast({ variant: 'destructive', title: 'Not Authenticated' });
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const appUser = await getCurrentUser(firebaseUser);
+            const fromAccountRef = doc(firestore, 'accounts', fromAccountId);
+            const toAccountRef = doc(firestore, 'accounts', toAccountId);
+            const transferId = doc(collection(firestore, 'accounts')).id; // Just for a unique ID
+
+            await runTransaction(firestore, async (transaction) => {
+                const fromDoc = await transaction.get(fromAccountRef);
+                const toDoc = await transaction.get(toAccountRef);
+
+                if (!fromDoc.exists() || !toDoc.exists()) {
+                    throw new Error("One or both accounts not found.");
+                }
+
+                const fromData = fromDoc.data();
+                const toData = toDoc.data();
+
+                // Update balances
+                const newFromBalance = fromData.balance - parsedAmount;
+                const newToBalance = toData.balance + parsedAmount;
+                transaction.update(fromAccountRef, { balance: newFromBalance });
+                transaction.update(toAccountRef, { balance: newToBalance });
+
+                // Create debit transaction
+                const debitTxRef = doc(collection(fromAccountRef, 'transactions'));
+                transaction.set(debitTxRef, {
+                    type: 'transfer', amount: parsedAmount, note: `Transfer to ${toData.name}. ${note}`,
+                    runningBalance: newFromBalance, transferId: transferId,
+                    createdAt: serverTimestamp(), createdBy: appUser.id, createdByName: appUser.name
+                });
+
+                // Create credit transaction
+                const creditTxRef = doc(collection(toAccountRef, 'transactions'));
+                transaction.set(creditTxRef, {
+                    type: 'transfer', amount: parsedAmount, note: `Transfer from ${fromData.name}. ${note}`,
+                    runningBalance: newToBalance, transferId: transferId,
+                    createdAt: serverTimestamp(), createdBy: appUser.id, createdByName: appUser.name
+                });
+            });
+
+            toast({ title: 'Transfer Successful', description: 'The transfer has been recorded.' });
+            onTransferAdded();
+            setOpen(false);
+            setFromAccountId(null);
+            setToAccountId(null);
+            setAmount('');
+            setNote('');
+        } catch (error: any) {
+            console.error("Transfer failed:", error);
+            toast({ variant: 'destructive', title: 'Transfer Failed', description: error.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <Button variant="outline">
+                    <ArrowRightLeft className="mr-2 h-4 w-4" />
+                    New Transfer
+                </Button>
+            </DialogTrigger>
+            <DialogContent>
+                <form onSubmit={handleSubmit}>
+                    <DialogHeader>
+                        <DialogTitle>Transfer Between Accounts</DialogTitle>
+                        <DialogDescription>Move funds from one standard account to another.</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>From (Debit)</Label>
+                                <Select onValueChange={setFromAccountId} value={fromAccountId || ''}>
+                                    <SelectTrigger><SelectValue placeholder="Select account..." /></SelectTrigger>
+                                    <SelectContent>
+                                        {standardAccounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>To (Credit)</Label>
+                                <Select onValueChange={setToAccountId} value={toAccountId || ''}>
+                                    <SelectTrigger><SelectValue placeholder="Select account..." /></SelectTrigger>
+                                    <SelectContent>
+                                        {standardAccounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Amount</Label>
+                            <Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Note (Optional)</Label>
+                            <Textarea value={note} onChange={(e) => setNote(e.target.value)} />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                        <Button type="submit" disabled={loading}>
+                            {loading ? 'Transferring...' : 'Record Transfer'}
+                        </Button>
+                    </DialogFooter>
+                </form>
             </DialogContent>
         </Dialog>
     );
@@ -769,6 +900,7 @@ export default function AccountingPage() {
         <div className="flex gap-2">
             <NewAccountDialog onAccountAdded={forceRefresh} />
             <NewReceivableDialog onAccountAdded={forceRefresh} accounts={accounts || []} />
+            <NewTransferDialog onTransferAdded={forceRefresh} accounts={accounts || []} />
         </div>
       </div>
       <div className="grid md:grid-cols-3 gap-4">
@@ -863,7 +995,8 @@ export default function AccountingPage() {
                       <span className={`font-semibold capitalize ${
                             tx.type === 'income' ? 'text-green-500' :
                             tx.type === 'expense' ? 'text-red-500' :
-                            'text-blue-500'
+                            tx.type === 'payment' ? 'text-blue-500' :
+                            'text-purple-500' // For transfers
                         }`}>
                         {tx.type}
                       </span>
@@ -892,3 +1025,5 @@ export default function AccountingPage() {
     </div>
   );
 }
+
+    

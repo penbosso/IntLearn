@@ -439,7 +439,7 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Account",
       "type": "object",
-      "description": "Represents a financial account.",
+      "description": "Represents a financial account, which can be nested.",
       "properties": {
         "id": {
           "type": "string",
@@ -447,11 +447,29 @@
         },
         "name": {
           "type": "string",
-          "description": "Name of the account (e.g., 'Main Bank Account')."
+          "description": "Name of the account (e.g., 'Main Bank Account', 'Customer A')."
         },
         "balance": {
           "type": "number",
-          "description": "The current balance of the account."
+          "description": "The current balance. For receivables, this is the amount still owed."
+        },
+        "parentId": {
+            "type": ["string", "null"],
+            "description": "The ID of the parent account, for nesting."
+        },
+        "type": {
+            "type": "string",
+            "enum": ["standard", "receivable"],
+            "description": "'standard' for regular ledgers, 'receivable' for tracking debts."
+        },
+        "initialAmount": {
+            "type": "number",
+            "description": "For receivable accounts, the total initial amount of the credit/invoice."
+        },
+        "status": {
+            "type": "string",
+            "enum": ["open", "closed"],
+            "description": "The status of a receivable account."
         },
         "createdAt": {
           "type": "string",
@@ -463,7 +481,7 @@
           "description": "The ID of the user who created the account."
         }
       },
-      "required": ["id", "name", "balance", "createdAt", "createdBy"]
+      "required": ["id", "name", "balance", "createdAt", "createdBy", "type", "status"]
     },
     "Transaction": {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -482,7 +500,7 @@
         "type": {
           "type": "string",
           "description": "Type of transaction.",
-          "enum": ["income", "expense"]
+          "enum": ["income", "expense", "payment", "transfer"]
         },
         "amount": {
           "type": "number",
@@ -495,6 +513,10 @@
         "runningBalance": {
           "type": "number",
           "description": "The balance of the account after this transaction."
+        },
+        "transferId": {
+          "type": "string",
+          "description": "A shared ID to link the two sides of a transfer transaction."
         },
         "createdAt": {
           "type": "string",
