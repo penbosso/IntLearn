@@ -35,12 +35,23 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, PlusCircle, Banknote } from 'lucide-react';
+import { Loader2, PlusCircle, Banknote, Trash2 } from 'lucide-react';
 import { useCollection, useFirestore, useUser, useMemoFirebase } from '@/firebase';
 import {
   collection,
@@ -50,6 +61,9 @@ import {
   runTransaction,
   doc,
   serverTimestamp,
+  getDocs,
+  writeBatch,
+  deleteDoc
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import type { Account, Transaction } from '@/lib/data';
@@ -305,6 +319,77 @@ function NewAccountDialog({ onAccountAdded }: { onAccountAdded: () => void }) {
   );
 }
 
+function DeleteAccountButton({ account, onAccountDeleted }: { account: Account, onAccountDeleted: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const firestore = useFirestore();
+  const { toast } = useToast();
+
+  const handleDelete = async () => {
+    setLoading(true);
+    try {
+      // 1. Get all transactions in the subcollection
+      const transactionsRef = collection(firestore, `accounts/${account.id}/transactions`);
+      const transactionsSnapshot = await getDocs(transactionsRef);
+      
+      // 2. Create a batch to delete all transactions and the account itself
+      const batch = writeBatch(firestore);
+      
+      transactionsSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+      
+      const accountRef = doc(firestore, 'accounts', account.id);
+      batch.delete(accountRef);
+      
+      // 3. Commit the batch
+      await batch.commit();
+
+      toast({
+        title: 'Account Deleted',
+        description: `Account "${account.name}" and all its transactions have been deleted.`,
+      });
+      onAccountDeleted();
+    } catch (error: any) {
+      console.error('Failed to delete account:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Deletion Failed',
+        description: error.message || 'Could not delete the account.',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+     <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="destructive" disabled={loading}>
+          <Trash2 className="mr-2 h-4 w-4" />
+          Delete Account
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This action cannot be undone. This will permanently delete the account 
+            <span className="font-semibold"> "{account.name}"</span> and all of its associated transactions.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={handleDelete} disabled={loading}>
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {loading ? 'Deleting...' : 'Delete'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+
 export default function AccountingPage() {
   const firestore = useFirestore();
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>();
@@ -326,6 +411,11 @@ export default function AccountingPage() {
 
   const handleAccountChange = (accountId: string) => {
     setSelectedAccountId(accountId);
+  };
+  
+  const handleAccountDeleted = () => {
+    setSelectedAccountId(undefined); // Deselect the deleted account
+    forceRefresh();
   };
 
   const forceRefresh = () => setRefreshKey(prev => prev + 1);
@@ -374,6 +464,11 @@ export default function AccountingPage() {
             </div>
           )}
         </CardContent>
+         {selectedAccount && (
+            <CardFooter className="justify-end border-t pt-4">
+                <DeleteAccountButton account={selectedAccount} onAccountDeleted={handleAccountDeleted} />
+            </CardFooter>
+         )}
       </Card>
 
       <Card>
@@ -435,3 +530,5 @@ export default function AccountingPage() {
     </div>
   );
 }
+
+    
