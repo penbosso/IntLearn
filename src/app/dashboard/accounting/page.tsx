@@ -542,18 +542,6 @@ function SettleReceivableDialog({ receivable, onSettled }: { receivable: Account
                     runningBalance: newReceivableBalance,
                     createdAt: serverTimestamp(), createdBy: appUser.id, createdByName: appUser.name
                 });
-
-                // 3. Log the transaction for clarity in the parent. The parent's total balance does not change.
-                // The composition of assets changes (receivable -> cash), but total value is the same.
-                const parentBalance = parentDoc.data().balance;
-                const parentTransactionRef = doc(collection(firestore, `accounts/${receivable.parentId!}/transactions`));
-                 transaction.set(parentTransactionRef, {
-                     type: 'income',
-                     amount: parsedAmount, 
-                     note: `Payment from: ${receivable.name}`, 
-                     runningBalance: parentBalance,
-                     createdAt: serverTimestamp(), createdBy: appUser.id, createdByName: appUser.name
-                 });
             });
 
             if (receivable.balance - parsedAmount === 0) {
@@ -1025,5 +1013,3 @@ export default function AccountingPage() {
     </div>
   );
 }
-
-    
