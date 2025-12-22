@@ -85,12 +85,17 @@ export type Account = {
     balance: number;
     createdAt: any; // Firestore Timestamp
     createdBy: string;
+    parentId?: string | null;
+    type?: 'standard' | 'receivable';
+    initialAmount?: number;
+    status?: 'open' | 'closed';
+    children?: Account[];
 }
 
 export type Transaction = {
     id: string;
     accountId: string;
-    type: 'income' | 'expense';
+    type: 'income' | 'expense' | 'payment';
     amount: number;
     note: string;
     runningBalance: number;

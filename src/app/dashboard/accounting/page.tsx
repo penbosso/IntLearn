@@ -370,6 +370,17 @@ function NewReceivableDialog({ onAccountAdded, accounts }: { onAccountAdded: () 
             const newAccountRef = doc(collection(firestore, 'accounts'));
 
             await runTransaction(firestore, async (transaction) => {
+                let parentAccountRef = null;
+                let parentAccountDoc = null;
+
+                if (parentId) {
+                    parentAccountRef = doc(firestore, 'accounts', parentId);
+                    parentAccountDoc = await transaction.get(parentAccountRef);
+                    if (!parentAccountDoc.exists()) {
+                        throw new Error("Parent account not found.");
+                    }
+                }
+                
                 // 1. Create the receivable account
                 transaction.set(newAccountRef, {
                     name: customerName,
@@ -383,8 +394,8 @@ function NewReceivableDialog({ onAccountAdded, accounts }: { onAccountAdded: () 
                 });
 
                 // 2. Create the initial transaction for the receivable account
-                const newTransactionRef = doc(collection(newAccountRef, 'transactions'));
-                 transaction.set(newTransactionRef, {
+                const newReceivableTransactionRef = doc(collection(newAccountRef, 'transactions'));
+                 transaction.set(newReceivableTransactionRef, {
                     accountId: newAccountRef.id,
                     type: 'income', // Represents the credit extended
                     amount: parsedAmount,
@@ -394,6 +405,26 @@ function NewReceivableDialog({ onAccountAdded, accounts }: { onAccountAdded: () 
                     createdBy: appUser.id,
                     createdByName: appUser.name || 'N/A',
                 });
+
+                // 3. Update parent account balance and add transaction if parent exists
+                if (parentAccountRef && parentAccountDoc) {
+                    const currentParentBalance = parentAccountDoc.data()!.balance;
+                    const newParentBalance = currentParentBalance + parsedAmount;
+                    
+                    transaction.update(parentAccountRef, { balance: newParentBalance });
+
+                    const parentTransactionRef = doc(collection(parentAccountRef, 'transactions'));
+                    transaction.set(parentTransactionRef, {
+                        accountId: parentId,
+                        type: 'income',
+                        amount: parsedAmount,
+                        note: `New receivable created: ${customerName}`,
+                        runningBalance: newParentBalance,
+                        createdAt: serverTimestamp(),
+                        createdBy: appUser.id,
+                        createdByName: appUser.name || 'N/A',
+                    });
+                }
             });
 
 
@@ -497,6 +528,13 @@ function SettleReceivableDialog({ receivable, accounts, onSettled }: { receivabl
             await runTransaction(firestore, async (transaction) => {
                 const receivableDoc = await transaction.get(receivableRef);
                 const depositDoc = await transaction.get(depositAccountRef);
+                
+                let parentAccountDoc = null;
+                if (receivableDoc.exists() && receivableDoc.data().parentId) {
+                    const parentRef = doc(firestore, 'accounts', receivableDoc.data().parentId);
+                    parentAccountDoc = await transaction.get(parentRef);
+                }
+
 
                 if (!receivableDoc.exists() || !depositDoc.exists()) {
                     throw new Error("One or more accounts do not exist.");
@@ -523,6 +561,26 @@ function SettleReceivableDialog({ receivable, accounts, onSettled }: { receivabl
                      type: 'income', amount: parsedAmount, note: `From: ${receivable.name} - ${note}`, runningBalance: newDepositBalance,
                      createdAt: serverTimestamp(), createdBy: appUser.id, createdByName: appUser.name
                  });
+
+                // 5. Update parent of receivable if it exists
+                if (parentAccountDoc && parentAccountDoc.exists()) {
+                    const currentParentBalance = parentAccountDoc.data()!.balance;
+                    const newParentBalance = currentParentBalance - parsedAmount;
+                    
+                    transaction.update(parentAccountDoc.ref, { balance: newParentBalance });
+
+                    const parentTransactionRef = doc(collection(parentAccountDoc.ref, 'transactions'));
+                    transaction.set(parentTransactionRef, {
+                        accountId: parentAccountDoc.id,
+                        type: 'expense',
+                        amount: parsedAmount,
+                        note: `Payment received from: ${receivable.name}`,
+                        runningBalance: newParentBalance,
+                        createdAt: serverTimestamp(),
+                        createdBy: appUser.id,
+                        createdByName: appUser.name,
+                    });
+                }
             });
 
             if (receivable.balance - parsedAmount === 0) {
@@ -688,7 +746,8 @@ export default function AccountingPage() {
     let total = 0;
 
     accounts.forEach(acc => {
-      if (acc.type === 'standard') {
+      // Only include standard, non-nested accounts in the total company liquidity
+      if (acc.type === 'standard' && !acc.parentId) {
         total += acc.balance;
       }
       const accountWithChildren = accountsById.get(acc.id)!;
@@ -697,6 +756,10 @@ export default function AccountingPage() {
       } else {
         rootAccounts.push(accountWithChildren);
       }
+    });
+     // Sort children alphabetically
+    accountsById.forEach(acc => {
+        acc.children.sort((a, b) => a.name.localeCompare(b.name));
     });
 
     return { hierarchicalAccounts: rootAccounts, totalBalance: total };
@@ -787,7 +850,7 @@ export default function AccountingPage() {
         <Card>
              <CardHeader>
                 <CardTitle>Company Liquidity</CardTitle>
-                <CardDescription>Total balance across all standard accounts.</CardDescription>
+                <CardDescription>Total balance across all root-level standard accounts.</CardDescription>
             </CardHeader>
             <CardContent>
                 <p className="text-4xl font-bold">
@@ -860,5 +923,3 @@ export default function AccountingPage() {
     </div>
   );
 }
-
-    
