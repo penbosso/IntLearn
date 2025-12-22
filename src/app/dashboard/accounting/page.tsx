@@ -235,15 +235,37 @@ function NewAccountDialog({ onAccountAdded, parentId = null }: { onAccountAdded:
 
     setLoading(true);
     try {
-      await addDoc(collection(firestore, 'accounts'), {
-        name: accountName,
-        balance: parsedBalance,
-        createdAt: serverTimestamp(),
-        createdBy: user.uid,
-        parentId: parentId,
-        type: 'standard',
-        status: 'open',
+      const appUser = await getCurrentUser(user);
+      const newAccountRef = doc(collection(firestore, 'accounts'));
+
+      await runTransaction(firestore, async (transaction) => {
+        // 1. Create the account
+        transaction.set(newAccountRef, {
+            name: accountName,
+            balance: parsedBalance,
+            createdAt: serverTimestamp(),
+            createdBy: user.uid,
+            parentId: parentId,
+            type: 'standard',
+            status: 'open',
+        });
+
+        // 2. Create the initial transaction if balance > 0
+        if (parsedBalance > 0) {
+            const newTransactionRef = doc(collection(newAccountRef, 'transactions'));
+            transaction.set(newTransactionRef, {
+                accountId: newAccountRef.id,
+                type: 'income',
+                amount: parsedBalance,
+                note: 'Initial Balance',
+                runningBalance: parsedBalance, // The first transaction's running balance is the balance itself
+                createdAt: serverTimestamp(),
+                createdBy: appUser.id,
+                createdByName: appUser.name || 'N/A',
+            });
+        }
       });
+
 
       toast({
         title: 'Account Created',
@@ -344,16 +366,36 @@ function NewReceivableDialog({ onAccountAdded, accounts }: { onAccountAdded: () 
 
         setLoading(true);
         try {
-            await addDoc(collection(firestore, 'accounts'), {
-                name: customerName,
-                balance: parsedAmount, // Initial balance is the full amount owed
-                initialAmount: parsedAmount,
-                createdAt: serverTimestamp(),
-                createdBy: user.uid,
-                parentId: parentId,
-                type: 'receivable',
-                status: 'open',
+            const appUser = await getCurrentUser(user);
+            const newAccountRef = doc(collection(firestore, 'accounts'));
+
+            await runTransaction(firestore, async (transaction) => {
+                // 1. Create the receivable account
+                transaction.set(newAccountRef, {
+                    name: customerName,
+                    balance: parsedAmount,
+                    initialAmount: parsedAmount,
+                    createdAt: serverTimestamp(),
+                    createdBy: user.uid,
+                    parentId: parentId,
+                    type: 'receivable',
+                    status: 'open',
+                });
+
+                // 2. Create the initial transaction for the receivable account
+                const newTransactionRef = doc(collection(newAccountRef, 'transactions'));
+                 transaction.set(newTransactionRef, {
+                    accountId: newAccountRef.id,
+                    type: 'income', // Represents the credit extended
+                    amount: parsedAmount,
+                    note: 'Initial receivable amount',
+                    runningBalance: parsedAmount,
+                    createdAt: serverTimestamp(),
+                    createdBy: appUser.id,
+                    createdByName: appUser.name || 'N/A',
+                });
             });
+
 
             toast({ title: 'Receivable Created', description: `A new receivable for ${customerName} has been recorded.` });
             onAccountAdded();
