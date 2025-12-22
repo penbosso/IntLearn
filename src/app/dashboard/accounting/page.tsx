@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import {
   Card,
   CardContent,
@@ -51,7 +51,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, PlusCircle, Banknote, Trash2 } from 'lucide-react';
+import { Loader2, PlusCircle, Banknote, Trash2, FilePlus2, HandCoins } from 'lucide-react';
 import { useCollection, useFirestore, useUser, useMemoFirebase } from '@/firebase';
 import {
   collection,
@@ -63,7 +63,7 @@ import {
   serverTimestamp,
   getDocs,
   writeBatch,
-  deleteDoc
+  updateDoc
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import type { Account, Transaction } from '@/lib/data';
@@ -112,7 +112,6 @@ function NewTransactionDialog({ accountId, onTransactionAdded }: { accountId: st
             const currentBalance = accountDoc.data().balance;
             const newBalance = type === 'income' ? currentBalance + parsedAmount : currentBalance - parsedAmount;
             
-            // 1. Add new transaction document
             const newTransactionRef = doc(transactionsRef);
             transaction.set(newTransactionRef, {
                 accountId: accountId,
@@ -125,7 +124,6 @@ function NewTransactionDialog({ accountId, onTransactionAdded }: { accountId: st
                 createdByName: appUser.name || 'N/A',
             });
 
-            // 2. Update account balance
             transaction.update(accountRef, { balance: newBalance });
         });
 
@@ -210,7 +208,7 @@ function NewTransactionDialog({ accountId, onTransactionAdded }: { accountId: st
   );
 }
 
-function NewAccountDialog({ onAccountAdded }: { onAccountAdded: () => void }) {
+function NewAccountDialog({ onAccountAdded, parentId = null }: { onAccountAdded: () => void, parentId?: string | null }) {
   const { toast } = useToast();
   const firestore = useFirestore();
   const { user } = useUser();
@@ -242,6 +240,9 @@ function NewAccountDialog({ onAccountAdded }: { onAccountAdded: () => void }) {
         balance: parsedBalance,
         createdAt: serverTimestamp(),
         createdBy: user.uid,
+        parentId: parentId,
+        type: 'standard',
+        status: 'open',
       });
 
       toast({
@@ -275,9 +276,9 @@ function NewAccountDialog({ onAccountAdded }: { onAccountAdded: () => void }) {
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Create New Account</DialogTitle>
+            <DialogTitle>Create New Standard Account</DialogTitle>
             <DialogDescription>
-              Set up a new financial account to track.
+              Set up a new ledger account. This can be a parent account (e.g., "Assets") or a sub-account.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -319,6 +320,239 @@ function NewAccountDialog({ onAccountAdded }: { onAccountAdded: () => void }) {
   );
 }
 
+function NewReceivableDialog({ onAccountAdded, accounts }: { onAccountAdded: () => void, accounts: Account[] }) {
+    const { toast } = useToast();
+    const firestore = useFirestore();
+    const { user } = useUser();
+    const [loading, setLoading] = useState(false);
+    const [open, setOpen] = useState(false);
+    const [customerName, setCustomerName] = useState('');
+    const [invoiceAmount, setInvoiceAmount] = useState('');
+    const [parentId, setParentId] = useState<string | null>(null);
+
+    const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        const parsedAmount = parseFloat(invoiceAmount);
+        if (!customerName.trim() || isNaN(parsedAmount) || parsedAmount <= 0) {
+            toast({ variant: 'destructive', title: 'Invalid Input' });
+            return;
+        }
+        if (!user) {
+            toast({ variant: 'destructive', title: 'Not Authenticated' });
+            return;
+        }
+
+        setLoading(true);
+        try {
+            await addDoc(collection(firestore, 'accounts'), {
+                name: customerName,
+                balance: parsedAmount, // Initial balance is the full amount owed
+                initialAmount: parsedAmount,
+                createdAt: serverTimestamp(),
+                createdBy: user.uid,
+                parentId: parentId,
+                type: 'receivable',
+                status: 'open',
+            });
+
+            toast({ title: 'Receivable Created', description: `A new receivable for ${customerName} has been recorded.` });
+            onAccountAdded();
+            setOpen(false);
+            setCustomerName('');
+            setInvoiceAmount('');
+            setParentId(null);
+        } catch (error: any) {
+            console.error('Failed to create receivable:', error);
+            toast({ variant: 'destructive', title: 'Creation Failed', description: error.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <Button variant="outline">
+                    <FilePlus2 className="mr-2 h-4 w-4" />
+                    New Receivable
+                </Button>
+            </DialogTrigger>
+            <DialogContent>
+                <form onSubmit={handleSubmit}>
+                    <DialogHeader>
+                        <DialogTitle>Create New Receivable</DialogTitle>
+                        <DialogDescription>
+                            Record a new credit sale or invoice for a customer.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                         <div className="space-y-2">
+                            <Label htmlFor="parent-account">Parent Account (Optional)</Label>
+                             <Select onValueChange={(value) => setParentId(value)} value={parentId || ''}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Group under..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {accounts.filter(a => a.type === 'standard').map(acc => (
+                                        <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="customer-name">Customer / Invoice Name</Label>
+                            <Input id="customer-name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} required />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="invoice-amount">Amount</Label>
+                            <Input id="invoice-amount" type="number" step="0.01" value={invoiceAmount} onChange={(e) => setInvoiceAmount(e.target.value)} required />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                        <Button type="submit" disabled={loading}>
+                            {loading ? 'Creating...' : 'Create Receivable'}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function SettleReceivableDialog({ receivable, accounts, onSettled }: { receivable: Account, accounts: Account[], onSettled: () => void }) {
+    const { toast } = useToast();
+    const firestore = useFirestore();
+    const { user: firebaseUser } = useUser();
+    const [loading, setLoading] = useState(false);
+    const [open, setOpen] = useState(false);
+    
+    const [paymentAmount, setPaymentAmount] = useState('');
+    const [depositAccountId, setDepositAccountId] = useState<string | undefined>();
+    const [note, setNote] = useState(`Payment for ${receivable.name}`);
+
+    const handleSettle = async () => {
+        const parsedAmount = parseFloat(paymentAmount);
+        if (!depositAccountId || isNaN(parsedAmount) || parsedAmount <= 0) {
+            toast({ variant: 'destructive', title: 'Invalid Input', description: 'Please select a deposit account and enter a valid amount.' });
+            return;
+        }
+        if (!firebaseUser) {
+            toast({ variant: 'destructive', title: 'Not Authenticated' });
+            return;
+        }
+        if (parsedAmount > receivable.balance) {
+             toast({ variant: 'destructive', title: 'Overpayment', description: 'Payment cannot be greater than the remaining balance.' });
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const appUser = await getCurrentUser(firebaseUser);
+            const receivableRef = doc(firestore, 'accounts', receivable.id);
+            const depositAccountRef = doc(firestore, 'accounts', depositAccountId);
+
+            await runTransaction(firestore, async (transaction) => {
+                const receivableDoc = await transaction.get(receivableRef);
+                const depositDoc = await transaction.get(depositAccountRef);
+
+                if (!receivableDoc.exists() || !depositDoc.exists()) {
+                    throw new Error("One or more accounts do not exist.");
+                }
+
+                // 1. Update receivable account balance
+                const newReceivableBalance = receivableDoc.data().balance - parsedAmount;
+                transaction.update(receivableRef, { balance: newReceivableBalance });
+
+                // 2. Add 'payment' transaction to receivable account
+                const receivableTransactionRef = doc(collection(firestore, `accounts/${receivable.id}/transactions`));
+                transaction.set(receivableTransactionRef, {
+                    type: 'payment', amount: parsedAmount, note, runningBalance: newReceivableBalance,
+                    createdAt: serverTimestamp(), createdBy: appUser.id, createdByName: appUser.name
+                });
+
+                // 3. Update deposit account balance
+                const newDepositBalance = depositDoc.data().balance + parsedAmount;
+                transaction.update(depositAccountRef, { balance: newDepositBalance });
+
+                // 4. Add 'income' transaction to deposit account
+                 const depositTransactionRef = doc(collection(firestore, `accounts/${depositAccountId}/transactions`));
+                 transaction.set(depositTransactionRef, {
+                     type: 'income', amount: parsedAmount, note: `From: ${receivable.name} - ${note}`, runningBalance: newDepositBalance,
+                     createdAt: serverTimestamp(), createdBy: appUser.id, createdByName: appUser.name
+                 });
+            });
+
+            if (receivable.balance - parsedAmount === 0) {
+                 await updateDoc(receivableRef, { status: 'closed' });
+                 toast({ title: 'Receivable Closed!', description: `${receivable.name} has been fully paid and closed.` });
+            } else {
+                 toast({ title: 'Payment Recorded', description: 'The payment has been successfully recorded.' });
+            }
+            
+            onSettled();
+            setOpen(false);
+            setPaymentAmount('');
+
+        } catch (error: any) {
+             console.error("Failed to settle receivable:", error);
+            toast({ variant: 'destructive', title: 'Settlement Failed', description: error.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <Button>
+                    <HandCoins className="mr-2 h-4 w-4" />
+                    Settle Receivable
+                </Button>
+            </DialogTrigger>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Settle Receivable for {receivable.name}</DialogTitle>
+                    <DialogDescription>
+                       Remaining Balance: <span className="font-bold">{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'GHS' }).format(receivable.balance)}</span>
+                    </DialogDescription>
+                </DialogHeader>
+                 <div className="grid gap-4 py-4">
+                    <div className="space-y-2">
+                        <Label>Payment Amount</Label>
+                        <div className="flex gap-2">
+                            <Input type="number" step="0.01" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} />
+                             <Button variant="outline" onClick={() => setPaymentAmount(String(receivable.balance))}>Full</Button>
+                        </div>
+                    </div>
+                     <div className="space-y-2">
+                        <Label>Deposit to Account</Label>
+                         <Select onValueChange={setDepositAccountId} value={depositAccountId}>
+                            <SelectTrigger><SelectValue placeholder="Select deposit account..." /></SelectTrigger>
+                            <SelectContent>
+                                {accounts.filter(a => a.type === 'standard').map(acc => (
+                                    <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                     <div className="space-y-2">
+                        <Label>Note</Label>
+                        <Textarea value={note} onChange={(e) => setNote(e.target.value)} />
+                    </div>
+                 </div>
+                 <DialogFooter>
+                    <DialogClose asChild><Button type="button" variant="ghost">Cancel</Button></DialogClose>
+                    <Button onClick={handleSettle} disabled={loading}>
+                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Record Payment
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 function DeleteAccountButton({ account, onAccountDeleted }: { account: Account, onAccountDeleted: () => void }) {
   const [loading, setLoading] = useState(false);
   const firestore = useFirestore();
@@ -327,11 +561,9 @@ function DeleteAccountButton({ account, onAccountDeleted }: { account: Account, 
   const handleDelete = async () => {
     setLoading(true);
     try {
-      // 1. Get all transactions in the subcollection
       const transactionsRef = collection(firestore, `accounts/${account.id}/transactions`);
       const transactionsSnapshot = await getDocs(transactionsRef);
       
-      // 2. Create a batch to delete all transactions and the account itself
       const batch = writeBatch(firestore);
       
       transactionsSnapshot.docs.forEach(doc => {
@@ -341,7 +573,6 @@ function DeleteAccountButton({ account, onAccountDeleted }: { account: Account, 
       const accountRef = doc(firestore, 'accounts', account.id);
       batch.delete(accountRef);
       
-      // 3. Commit the batch
       await batch.commit();
 
       toast({
@@ -364,9 +595,9 @@ function DeleteAccountButton({ account, onAccountDeleted }: { account: Account, 
   return (
      <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="destructive" disabled={loading}>
+        <Button variant="destructive" size="sm" disabled={loading}>
           <Trash2 className="mr-2 h-4 w-4" />
-          Delete Account
+          Delete
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
@@ -407,6 +638,28 @@ export default function AccountingPage() {
   );
   const { data: transactions, isLoading: areTransactionsLoading } = useCollection<Transaction>(transactionsQuery);
   
+  const { hierarchicalAccounts, totalBalance } = useMemo(() => {
+    if (!accounts) return { hierarchicalAccounts: [], totalBalance: 0 };
+
+    const accountsById = new Map(accounts.map(acc => [acc.id, { ...acc, children: [] as Account[] }]));
+    const rootAccounts: Account[] = [];
+    let total = 0;
+
+    accounts.forEach(acc => {
+      if (acc.type === 'standard') {
+        total += acc.balance;
+      }
+      const accountWithChildren = accountsById.get(acc.id)!;
+      if (acc.parentId && accountsById.has(acc.parentId)) {
+        accountsById.get(acc.parentId)!.children.push(accountWithChildren);
+      } else {
+        rootAccounts.push(accountWithChildren);
+      }
+    });
+
+    return { hierarchicalAccounts: rootAccounts, totalBalance: total };
+  }, [accounts]);
+  
   const selectedAccount = useMemo(() => accounts?.find(a => a.id === selectedAccountId), [accounts, selectedAccountId]);
 
   const handleAccountChange = (accountId: string) => {
@@ -414,11 +667,23 @@ export default function AccountingPage() {
   };
   
   const handleAccountDeleted = () => {
-    setSelectedAccountId(undefined); // Deselect the deleted account
+    setSelectedAccountId(undefined);
     forceRefresh();
   };
 
   const forceRefresh = () => setRefreshKey(prev => prev + 1);
+  
+  const renderAccountOptions = (accounts: Account[], level = 0) => {
+    return accounts.map(acc => (
+      <Fragment key={acc.id}>
+        <SelectItem value={acc.id} style={{ paddingLeft: `${level * 1.5}rem` }}>
+           {acc.type === 'receivable' && '↳'} {acc.name} {acc.type === 'receivable' ? `(Owed: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'GHS' }).format(acc.balance)})` : ''}
+        </SelectItem>
+        {acc.children && acc.children.length > 0 && renderAccountOptions(acc.children, level + 1)}
+      </Fragment>
+    ));
+  };
+
 
   return (
     <div className="space-y-6">
@@ -429,47 +694,66 @@ export default function AccountingPage() {
         </h1>
         <div className="flex gap-2">
             <NewAccountDialog onAccountAdded={forceRefresh} />
-            <NewTransactionDialog accountId={selectedAccountId!} onTransactionAdded={forceRefresh} />
+            <NewReceivableDialog onAccountAdded={forceRefresh} accounts={accounts || []} />
         </div>
       </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Account Overview</CardTitle>
-          <CardDescription>Select an account to view its balance and transaction history.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col md:flex-row items-center gap-4">
-          <div className="w-full md:w-1/3">
-            <Label htmlFor="account-select">Select Account</Label>
-            {areAccountsLoading ? (
-                <Loader2 className="mt-2 h-5 w-5 animate-spin" />
-            ) : (
-                <Select onValueChange={handleAccountChange} value={selectedAccountId}>
-                    <SelectTrigger id="account-select">
-                        <SelectValue placeholder="Select an account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {accounts?.map((acc) => (
-                            <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            )}
-          </div>
-          {selectedAccount && (
-            <div className="flex-1 text-center md:text-right">
-                <p className="text-sm text-muted-foreground">Current Balance</p>
-                <p className="text-4xl font-bold">
-                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'GHS' }).format(selectedAccount.balance)}
-                </p>
+      <div className="grid md:grid-cols-3 gap-4">
+        <Card className="md:col-span-2">
+            <CardHeader>
+            <CardTitle>Account Overview</CardTitle>
+            <CardDescription>Select an account to view its balance and transaction history.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col md:flex-row items-center gap-4">
+            <div className="w-full md:w-1/2">
+                <Label htmlFor="account-select">Select Account</Label>
+                {areAccountsLoading ? (
+                    <Loader2 className="mt-2 h-5 w-5 animate-spin" />
+                ) : (
+                    <Select onValueChange={handleAccountChange} value={selectedAccountId}>
+                        <SelectTrigger id="account-select">
+                            <SelectValue placeholder="Select an account" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {renderAccountOptions(hierarchicalAccounts)}
+                        </SelectContent>
+                    </Select>
+                )}
             </div>
-          )}
-        </CardContent>
-         {selectedAccount && (
-            <CardFooter className="justify-end border-t pt-4">
-                <DeleteAccountButton account={selectedAccount} onAccountDeleted={handleAccountDeleted} />
-            </CardFooter>
-         )}
-      </Card>
+            {selectedAccount && (
+                <div className="flex-1 text-center md:text-right">
+                    <p className="text-sm text-muted-foreground">
+                        {selectedAccount.type === 'receivable' ? 'Remaining Balance' : 'Current Balance'}
+                    </p>
+                    <p className="text-4xl font-bold">
+                        {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'GHS' }).format(selectedAccount.balance)}
+                    </p>
+                </div>
+            )}
+            </CardContent>
+            {selectedAccount && (
+                <CardFooter className="justify-end border-t pt-4 gap-2">
+                    {selectedAccount.type === 'receivable' && selectedAccount.status === 'open' && (
+                        <SettleReceivableDialog receivable={selectedAccount} accounts={accounts || []} onSettled={forceRefresh} />
+                    )}
+                    {selectedAccount.type === 'standard' && (
+                        <NewTransactionDialog accountId={selectedAccountId!} onTransactionAdded={forceRefresh} />
+                    )}
+                    <DeleteAccountButton account={selectedAccount} onAccountDeleted={handleAccountDeleted} />
+                </CardFooter>
+            )}
+        </Card>
+        <Card>
+             <CardHeader>
+                <CardTitle>Company Liquidity</CardTitle>
+                <CardDescription>Total balance across all standard accounts.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <p className="text-4xl font-bold">
+                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'GHS' }).format(totalBalance)}
+                </p>
+            </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader>
@@ -502,8 +786,12 @@ export default function AccountingPage() {
                   <TableRow key={tx.id}>
                     <TableCell>{tx.createdAt ? new Date(tx.createdAt.seconds * 1000).toLocaleString() : '...'}</TableCell>
                     <TableCell>
-                      <span className={`font-semibold ${tx.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
-                        {tx.type.charAt(0).toUpperCase() + tx.type.slice(1)}
+                      <span className={`font-semibold capitalize ${
+                            tx.type === 'income' ? 'text-green-500' :
+                            tx.type === 'expense' ? 'text-red-500' :
+                            'text-blue-500'
+                        }`}>
+                        {tx.type}
                       </span>
                     </TableCell>
                     <TableCell>{tx.note}</TableCell>
