@@ -113,10 +113,10 @@ export default function AdminUsersPage() {
                         <Avatar>
                           <AvatarImage src={user.avatarUrl} />
                           <AvatarFallback>
-                            {user.name?.charAt(0) || 'U'}
+                            {user.displayName?.charAt(0) || 'U'}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="font-medium">{user.name}</span>
+                        <span className="font-medium">{user.displayName}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">

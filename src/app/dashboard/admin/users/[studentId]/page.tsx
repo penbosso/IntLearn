@@ -202,13 +202,13 @@ export default function StudentDetailPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-6">
         <Avatar className="h-24 w-24 border-4">
-          <AvatarImage src={student.avatarUrl} alt={student.name} />
+          <AvatarImage src={student.avatarUrl} alt={student.displayName} />
           <AvatarFallback className="text-3xl">
-            {student.name ? student.name.charAt(0) : 'U'}
+            {student.displayName ? student.displayName.charAt(0) : 'U'}
           </AvatarFallback>
         </Avatar>
         <div>
-          <h1 className="text-3xl font-bold font-headline">{student.name}</h1>
+          <h1 className="text-3xl font-bold font-headline">{student.displayName}</h1>
           <p className="text-muted-foreground">{student.email}</p>
         </div>
       </div>
@@ -268,7 +268,7 @@ export default function StudentDetailPage() {
       <Card>
         <CardHeader>
           <CardTitle>Quiz History</CardTitle>
-          <CardDescription>A log of all quizzes taken by {student.name}.</CardDescription>
+          <CardDescription>A log of all quizzes taken by {student.displayName}.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>

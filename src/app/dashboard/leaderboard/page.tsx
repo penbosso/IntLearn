@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo } from 'react';
@@ -80,13 +81,13 @@ export default function LeaderboardPage() {
                     <TableCell>
                       <div className="flex items-center gap-4">
                         <Avatar>
-                          <AvatarImage src={user.avatarUrl} alt={user.name} />
+                          <AvatarImage src={user.avatarUrl} alt={user.displayName} />
                           <AvatarFallback>
-                            {user.name?.charAt(0) || 'U'}
+                            {user.displayName?.charAt(0) || 'U'}
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <p className="font-medium">{user.name}</p>
+                          <p className="font-medium">{user.displayName}</p>
                           <p className="text-sm text-muted-foreground">
                             {user.email}
                           </p>

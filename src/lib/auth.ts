@@ -8,6 +8,7 @@ export type UserRole = 'student' | 'admin' | 'creator' | 'accountant';
 
 export type User = {
   id: string;
+  displayName: string;
   name: string;
   email: string;
   role?: UserRole; // Keep for backwards compatibility
@@ -31,9 +32,13 @@ export async function getCurrentUser(firebaseUser?: FirebaseUser | null): Promis
       const roles = Array.isArray(userData.roles) && userData.roles.length > 0 
         ? userData.roles 
         : (userData.role ? [userData.role] : ['student']);
+      
+      const name = userData.displayName || firebaseUser.displayName || 'User';
+      
       return {
         id: firebaseUser.uid,
-        name: userData.displayName || firebaseUser.displayName || 'User',
+        name: name,
+        displayName: name,
         email: firebaseUser.email || '',
         avatarUrl: firebaseUser.photoURL || `https://i.pravatar.cc/150?u=${firebaseUser.uid}`,
         roles: roles,
@@ -42,10 +47,12 @@ export async function getCurrentUser(firebaseUser?: FirebaseUser | null): Promis
         lastActivityDate: userData.lastActivityDate,
       };
     } else {
+      const name = firebaseUser.displayName || 'User';
       // Default user profile if not in DB
        return {
         id: firebaseUser.uid,
-        name: firebaseUser.displayName || 'User',
+        name: name,
+        displayName: name,
         email: firebaseUser.email || '',
         avatarUrl: `https://i.pravatar.cc/150?u=${firebaseUser.uid}`,
         roles: ['student'],
@@ -59,6 +66,7 @@ export async function getCurrentUser(firebaseUser?: FirebaseUser | null): Promis
   return {
     id: 'mock-user',
     name: 'User',
+    displayName: 'User',
     email: 'user@example.com',
     roles: ['student'],
     avatarUrl: '',

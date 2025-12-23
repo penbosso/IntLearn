@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -32,7 +33,7 @@ export default function SettingsPage() {
     if (!isUserLoading && firebaseUser) {
       getCurrentUser(firebaseUser).then(user => {
         setUser(user);
-        setDisplayName(user.name);
+        setDisplayName(user.displayName);
       });
     }
   }, [firebaseUser, isUserLoading]);
@@ -91,7 +92,7 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="flex items-center gap-4">
                 <Avatar className="h-20 w-20">
-                  <AvatarImage src={user.avatarUrl} alt={user.name} />
+                  <AvatarImage src={user.avatarUrl} alt={user.displayName} />
                   <AvatarFallback>{displayName.charAt(0)}</AvatarFallback>
                 </Avatar>
                 <div>
