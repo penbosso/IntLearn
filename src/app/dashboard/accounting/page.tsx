@@ -548,22 +548,18 @@ function SettleReceivableDialog({ receivable, onSettled }: { receivable: Account
         try {
             const appUser = await getCurrentUser(firebaseUser);
             const receivableRef = doc(firestore, 'accounts', receivable.id);
-            const parentRef = doc(firestore, 'accounts', receivable.parentId);
-
+            
             await runTransaction(firestore, async (transaction) => {
                 const receivableDoc = await transaction.get(receivableRef);
-                const parentDoc = await transaction.get(parentRef);
                 
-                if (!receivableDoc.exists() || !parentDoc.exists()) {
-                    throw new Error("Receivable or parent account does not exist.");
+                if (!receivableDoc.exists()) {
+                    throw new Error("Receivable account does not exist.");
                 }
 
                 // 1. Update receivable account balance (decrease)
                 const newReceivableBalance = receivableDoc.data().balance - parsedAmount;
                 transaction.update(receivableRef, { balance: newReceivableBalance });
                 
-                // No change to parent balance directly, as we are converting one asset (receivable) to another (cash)
-
                 // 2. Add 'payment' transaction to receivable account ledger
                 const receivableTransactionRef = doc(collection(firestore, `accounts/${receivable.id}/transactions`));
                 transaction.set(receivableTransactionRef, {
@@ -775,6 +771,105 @@ function NewTransferDialog({ onTransferAdded, accounts }: { onTransferAdded: () 
         </Dialog>
     );
 }
+
+function NullifyTransactionButton({ transaction, account, onTransactionNullified }: { transaction: Transaction, account: Account, onTransactionNullified: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const firestore = useFirestore();
+  const { toast } = useToast();
+  const { user } = useUser();
+
+  const handleNullify = async () => {
+    if (!user) {
+      toast({ variant: 'destructive', title: 'Not Authenticated' });
+      return;
+    }
+
+    // Only allow nullifying simple income/expense
+    if (transaction.type !== 'income' && transaction.type !== 'expense') {
+      toast({ variant: 'destructive', title: 'Action Not Allowed', description: 'Only income and expense entries can be nullified this way.' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const appUser = await getCurrentUser(user);
+      const accountRef = doc(firestore, 'accounts', account.id);
+      const reversalType = transaction.type === 'income' ? 'expense' : 'income';
+
+      await runTransaction(firestore, async (tx) => {
+        const accountDoc = await tx.get(accountRef);
+        if (!accountDoc.exists()) {
+          throw new Error("Account does not exist.");
+        }
+
+        const currentBalance = accountDoc.data().balance;
+        // If reversing an income, it's a new expense (subtract). If reversing an expense, it's a new income (add).
+        const newBalance = reversalType === 'expense'
+          ? currentBalance - transaction.amount
+          : currentBalance + transaction.amount;
+
+        const newTransactionRef = doc(collection(accountRef, 'transactions'));
+        tx.set(newTransactionRef, {
+          accountId: account.id,
+          type: reversalType,
+          amount: transaction.amount,
+          note: `Nullification of transaction: "${transaction.note}"`,
+          runningBalance: newBalance,
+          createdAt: serverTimestamp(),
+          createdBy: appUser.id,
+          createdByName: appUser.name || 'N/A',
+        });
+
+        tx.update(accountRef, { balance: newBalance });
+        await createNotification(firestore, `${appUser.name} nullified a transaction of ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'GHS' }).format(transaction.amount)} for account "${account.name}".`, appUser.name);
+      });
+
+      toast({
+        title: 'Transaction Nullified',
+        description: 'A reversing transaction has been created.',
+      });
+      onTransactionNullified();
+    } catch (error: any) {
+      console.error('Failed to nullify transaction:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Nullification Failed',
+        description: error.message,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8">
+            <X className="h-4 w-4" />
+            <span className="sr-only">Nullify Transaction</span>
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Are you sure you want to nullify this transaction?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This action cannot be undone. This will create a new, opposite transaction to reverse the entry for:
+            <br />
+            <span className="font-semibold">"{transaction.note}"</span> amounting to <span className="font-semibold">{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'GHS' }).format(transaction.amount)}</span>.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={handleNullify} disabled={loading}>
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {loading ? 'Nullifying...' : 'Confirm Nullify'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 
 function DeleteAccountButton({ account, onAccountDeleted }: { account: Account, onAccountDeleted: () => void }) {
   const [loading, setLoading] = useState(false);
@@ -1076,12 +1171,13 @@ export default function AccountingPage() {
                 <TableHead>Recorded By</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead className="text-right">Running Balance</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {areTransactionsLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center">
+                  <TableCell colSpan={7} className="text-center">
                     <Loader2 className="mx-auto h-6 w-6 animate-spin" />
                   </TableCell>
                 </TableRow>
@@ -1107,11 +1203,20 @@ export default function AccountingPage() {
                     <TableCell className="text-right font-mono">
                         {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'GHS' }).format(tx.runningBalance)}
                     </TableCell>
+                    <TableCell className="text-right">
+                        {(tx.type === 'income' || tx.type === 'expense') && selectedAccount && (
+                            <NullifyTransactionButton 
+                                transaction={tx} 
+                                account={selectedAccount} 
+                                onTransactionNullified={forceRefresh}
+                            />
+                        )}
+                    </TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center h-24">
+                  <TableCell colSpan={7} className="text-center h-24">
                     {selectedAccountId ? 'No transactions for this account yet.' : 'Please select an account.'}
                   </TableCell>
                 </TableRow>
